@@ -25,5 +25,3 @@ how to solve like Me
 
 8. **📝 Full Write-up:**  
    - Detailed blog post explaining the lab → Published on [Medium](https://medium.com/).
-
--بس.
