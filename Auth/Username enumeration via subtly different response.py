@@ -50,7 +50,7 @@ def user_enum():
         if 'Invalid username or password.' in resp.text:
             print(f'[-] Invalid Username:  {username}')
         else:
-            print(f'\n\t Valid Username: {username}')
+            print(f'\n Valid Username: {username}\n\t')
             valid_user.append(username)
             break
 
