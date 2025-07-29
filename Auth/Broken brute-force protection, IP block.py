@@ -1,11 +1,11 @@
 import requests
 
 
-TARGET_URL = "https://0a981fef2cf005f00c1.web-security-academy.net/login"
+TARGET_URL = "https://0a981fef2cf005f00c1.web-security-academy.net/login"          # change for your URL
 VALID_USERNAME = "wiener"
 VALID_PASSWORD = "peter"
 TARGET_USERNAME = "carlos"
-PASSWORD_PATH="/PortSwigger/password.txt"
+PASSWORD_PATH="/PortSwigger/password.txt"                                          #  https://portswigger.net/web-security/authentication/auth-lab-passwords
 
 with open(PASSWORD_PATH,'r') as f:
 
