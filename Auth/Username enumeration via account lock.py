@@ -1,9 +1,9 @@
 import requests, time
 
 
- url = "https://0a3900d703e8beaf85714949009f00b3.web-security-academy.net/login"
-passwd_list = '/home/hi/ME/CTF/PortSwigger/passwords.txt'
-user_list = '/home/hi/ME/CTF/PortSwigger/usernames.txt'
+ url = "https://0a3 5714949009f00b3.web-security-academy.net/login"
+passwd_list = 'PortSwigger/passwords.txt'
+user_list = '/PortSwigger/usernames.txt'
 
  with open(user_list, 'r') as f:
     usernames = [line.strip() for line in f if line.strip()]
