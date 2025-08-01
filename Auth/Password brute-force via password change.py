@@ -10,8 +10,8 @@ import requests
 url = "https://0a0d00ce0335c6009.web-security-academy.net/my-account/change-password"            # add your url with path
 
 cookies={
-    "session":"BzMHFxLvhlQdXteSLymT6w7cY",                   # add your cookies
-    "session":"SBU2yeZFUh7aBdA1eV9K2Bmf"                    # add your cookies
+    "session":"BzMHFxLvhlQdXteSLymT6w7cY",                   # add your cookies one for your session after login
+    "session":"SBU2yeZFUh7aBdA1eV9K2Bmf"                    # add your cookies one for endpoint /change-password to send the req
 
 }
 
