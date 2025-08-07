@@ -83,7 +83,7 @@ def brute_force_2fa():
                 break
 
             else:
-                print(f"[-] failed {code_str} → status: {res.status_code}, url: {res.url}")
+                print(f"[-] failed {code_str} \t→ status: {res.status_code}")
 
         except Exception as e:
             print(f"[!] Error at {code_str} → {e}")
