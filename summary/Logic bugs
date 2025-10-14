@@ -1,0 +1,131 @@
+
+# logic bugs
+	
+	├── Failing to handle unconventional input (Failing to handle unconventional
+	 input)
+	│   ├── Overview
+	│   │   ├── Application must restrict input to values that make sense for
+	 business rules
+	│   │   ├── Missing explicit handling for unusual inputs yields undefined or
+	 exploitable behavior
+	│   │   └── Common risky areas: numeric types, string lengths, data formats
+	│   │
+	│   ├── Common Problematic Inputs
+	│   │   ├── Negative numbers (e.g., -1000)
+	│   │   ├── Zero where positive expected
+	│   │   ├── Extremely large numbers (overflow / logic bypass)
+	│   │   ├── Decimal vs integer confusion
+	│   │   ├── Abnormally long strings
+	│   │   └── Unexpected data types (arrays, nulls, JSON)
+	│   │
+	│   ├── Exploit example (Funds transfer)
+	│   │   ├── Typical pattern:
+	│   │   │   └── if ($transferAmount <= $currentBalance) { proceed }
+	│   │   ├── If amount can be negative, -1000 <= balance is always true →
+	 unintended reverse transfer
+	│   │   └── Small logic gap in a financial context = catastrophic impact
+	│   │
+	│   ├── Testing checklist (How to probe)
+	│   │   ├── Use Burp Proxy / Repeater / curl to tamper requests
+	│   │   ├── Try edge numeric cases: negative, 0, INT_MAX, INT_MIN, floats
+	│   │   ├── Send very long strings, unicode, null bytes
+	│   │   ├── Try different content types (JSON, multipart, form-data)
+	│   │   └── Disable JS / tamper DOM and resend forms
+	│   │
+	│   ├── What to observe
+	│   │   ├── Are limits enforced on server (not just client)?
+	│   │   ├── What happens at boundaries—errors or odd behavior?
+	│   │   ├── Is normalization / coercion applied (trim, casting)?
+	│   │   └── Are server-side checks consistent and sufficient?
+	│   │
+	│   ├── Mitigations / Fixes
+	│   │   ├── Strong server-side validation: strict type casting and range 
+       checks
+	│   │   ├── Whitelist allowed values and ranges (deny-by-default)
+	│   │   ├── DB-level constraints (CHECK, NOT NULL, foreign keys)
+	│   │   ├── Atomic DB transactions for financial logic; use locks or
+	 optimistic locking
+	│   │   ├── Idempotency tokens for non-repeatable operations
+	│   │   ├── Normalize inputs early (trim, canonicalize, parse safely)
+	│   │   ├── Rate-limiting & anomaly detection for suspicious inputs
+	│   │   └── Detailed logging of raw input, session, request id for forensics
+	│   │
+	│   ├── Implementation patterns
+	│   │   ├── Enforce validation across layers: API → service → DB
+	│   │   ├── Use explicit parsers and avoid implicit coercion
+	│   │   ├── Treat critical values as server-owned state (price, balances)
+	│   │   └── Use schema validation (JSON Schema, typed DTOs)
+	│   │
+	│   └── Advanced notes
+	│       ├── Distinguish input validation (shape/type) from business-rule
+	 validation (allowed by state)
+	│       ├── Concurrency issues often require DB-level solutions
+	 (transactions, isolation, versioning)
+	│       ├── If one form is vulnerable, similar endpoints often are — check
+	 broadly
+	│       └── Include abuse-case scenarios in QA test suites
+	│
+
+
+
+
+
+
+# my labs & payloads
+
+1)  first lab in portswigger  the main point is in the client-side validation i just change the price in /product 
+
+2)  second lab i just brute-force on the 2fa and print the cookie the put in my browser the main point is the dev dosen't link the valid cookie with user 'if it a valid cookie go in'
+
+3) 3 rd i can make the POST product_id=2&quantity=-1 make it with (-)  then add some product to balance your total payment and make it in your range money
+
+4) the main point is it don't validate on how many char to put in email field ,but after logedin i show just 255 char display in email field so i add buffer a*255@them-domain.your-mail-server
+
+5) the logic flaw => to access the /admin i must own @dontwannacry.com email so after create my account i try to update my email from /my-account , i found func that update the email so i try to change my email to abd @dontwannacry.com and no email confermation send  to make sure that i own this email `abdo@dontwannacry.com | 
+   so i accessed the admin and remove carlos
+
+6) in func that make me change my passwd i edit my username to admin to try if i can change the admin's passwd but i must enter the current passwd's admin so i try to remove this args `&curren-passwd=`  and booom it's work now i can change the passwd of admins without know his current passwd 
+
+7) in reset-passwd func  it's not validate is this token of forget-passwd for this user of not i can intercept this valid token and change the username for this valid token to any other user then i can change the passwd with this valid token `must link the token with one user`
+
+8) in 2fa i can bypass it because the site not verify if i do all steps with order (login -> login2 -> my-account?id=carlos )so i can do (login -> my-account?id=carlos) i drop this step and go to /my-account directly , it's work  
+
+9) also the site can't make  sure if follow its steps (/cart -> /cart/checkout -> /cart/order-confirm)
+   so i can bypass /cart/checkout and go directly into /cart/order-confirm and it's work
+
+10)   in the flaw (/login -> 'GET' /role-selector  -> /my-account ) i can drop /role-selector ,and don't select any roles then go to access /admin ( #not-work_senaroi so i change the method from POST -> GET)
+
+11) The lab contains a **Flawed Enforcement of Business Rules** vulnerability in the purchasing workflow.  
+	Users can add the “Lightweight l33t leather jacket” to their cart and apply coupon codes to get discounts.  
+	The relevant endpoint is **POST /checkout** where coupon codes are submitted for validation.  
+	Each coupon (e.g., `NEWCUST5`, `SIGNUP30`) is intended to be applied only once per order.  
+	The server only checks if the same coupon is applied consecutively, not in alternation.  
+	By alternating the two coupon codes, an attacker can repeatedly bypass the control.  
+	This allows the order total to be reduced below the remaining store credit, enabling free or nearly free purchases.  
+	The root cause is improper enforcement of business rules and assumptions about predictable user behavior.  the vuln code  -->
+
+		$appliedCoupons = []; // stores last applied coupon
+		
+		function applyCoupon($code, $cartTotal) {
+		    global $appliedCoupons;
+		
+		    // Check if last applied coupon is the same
+		    if (end($appliedCoupons) == $code) {
+		        return "Coupon already applied!";
+		    }
+		
+		    // Assume discount values for example
+		    $discounts = [
+		        'NEWCUST5' => 5,
+		        'SIGNUP30' => 30
+		    ];
+		
+		    if(isset($discounts[$code])) {
+		        $cartTotal -= $discounts[$code];
+		        $appliedCoupons[] = $code;
+		    }
+		
+		    return $cartTotal;
+		}
+
+12) 
