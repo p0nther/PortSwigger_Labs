@@ -1,0 +1,278 @@
+- ### What is API (Application Programming Interface)
+
+
+		│
+		├── Definition
+		│   ├── API = Application Programming Interface
+		│   └── A structured way for programs/services to talk to each other via requests and responses
+		│
+		├── Components
+		│   ├── Endpoint
+		│   │   └── A URL/path representing a resource or function → e.g., /api/users
+		│   ├── Method (HTTP method)
+		│   │   └── GET, POST, PUT, DELETE, PATCH, OPTIONS
+		│   ├── Request
+		│   │   ├── Headers → Authorization, Content-Type, Accept
+		│   │   ├── Path params → /api/users/{id}
+		│   │   ├── Query params → ?q=search&page=2
+		│   │   └── Body → JSON, form-data, XML
+		│   └── Response
+		│       ├── Status codes → 200, 201, 400, 401, 403, 404, 500
+		│       └── Body → JSON/XML + Headers
+		│
+		├── API Types
+		│   ├── REST (Representational State Transfer)
+		│   │   └── Resources + HTTP verbs + usually JSON
+		│   ├── SOAP (Simple Object Access Protocol)
+		│   │   └── XML-based, stricter, RPC-style
+		│   ├── GraphQL
+		│   │   └── Query-based; client requests exactly the fields it needs
+		│   └── gRPC / Thrift
+		│       └── Binary-packed, high-performance, often used for internal 
+		       microservices
+		│
+		├── Authentication & Authorization
+		│   ├── API Key (simple key)
+		│   ├── JWT (JSON Web Token)
+		│   ├── OAuth2 (authorization flows)
+		│   └── Mutual TLS (mTLS)
+		│
+		├── Discovery (how to find endpoints)
+		│   ├── Machine-readable docs
+		│   │   ├── OpenAPI / Swagger (yaml/json)
+		│   │   └── GraphQL schema / introspection
+		│   ├── Frontend analysis
+		│   │   ├── Inspect network tab (DevTools)
+		│   │   └── Parse JavaScript bundles (static analysis)
+		│   ├── Burp tools
+		│   │   ├── Burp Proxy (capture traffic)
+		│   │   ├── Burp Scanner (crawl/scan)
+		│   │   └── JS Link Finder BApp (extract links from JS)
+		│   └── Fuzzing / brute-forcing paths (ffuf, dirb)
+		│
+		├── Common Vulnerabilities
+		│   ├── Broken Object Level Authorization (BOLA)
+		│   ├── Broken Authentication
+		│   ├── Excessive Data Exposure (too many fields returned)
+		│   ├── Injection (SQL, NoSQL, Command)
+		│   ├── Mass Assignment (overposting)
+		│   ├── Rate limit bypass / abuse
+		│   ├── CSRF (for cookie-based APIs)
+		│   └── GraphQL-specific → Introspection, expensive queries
+		│
+		├── Testing Workflow
+		│   ├── 1. Collect endpoints (OpenAPI + crawling + JS)
+		│   ├── 2. Import into test tools (Postman / Burp / SoapUI)
+		│   ├── 3. Manual testing (Repeater / Postman)
+		│   ├── 4. Automated scanning (Burp Scanner / ZAP)
+		│   ├── 5. Fuzzing (Intruder, ffuf, custom fuzz lists)
+		│   ├── 6. Test auth & ACLs (BOLA checks)
+		│   └── 7. Log findings + write reproduction steps
+		│
+		├── Tools
+		│   ├── Postman (collections, quick tests)
+		│   ├── Burp Suite (proxy, scanner, intruder, extensions)
+		│   ├── Insomnia (Postman alternative)
+		│   ├── SoapUI (SOAP & heavy testing)
+		│   ├── ffuf / dirb / gobuster (discovery)
+		│   ├── jwt.io (decode JWTs)
+		│   └── GraphiQL / Altair (GraphQL playgrounds)
+		│
+		├── Best Practices (design & security)
+		│   ├── Use rate limits & throttling
+		│   ├── Principle of least privilege (ACLs)
+		│   ├── Validate & sanitize all inputs (server-side)
+		│   ├── Use parameterized queries (prevent SQL injection)
+		│   ├── Avoid exposing internal data structures
+		│   ├── Secure tokens (HttpOnly + Secure cookies or Authorization header)
+		│   └── Maintain machine-readable docs (OpenAPI) + versioning
+		│
+		└── Example Code (vulnerable + safe)
+		    ├── Vulnerable example (Python Flask) — insecure file access / direct 
+		    object reference
+		    └── Secure pattern (canonicalize, whitelist, check ownership)
+
+- ### Summary PortSwigger
+
+		│
+		├── Definition
+		│   ├── API = Application Programming Interface
+		│   ├── Enables software systems to communicate & share data
+		│   └── API testing = testing endpoints for security + functionality
+		│
+		├── Importance
+		│   ├── APIs power all dynamic websites
+		│   ├── Vulnerabilities can break CIA triad
+		│   │   ├── Confidentiality (data leaks)
+		│   │   ├── Integrity (tampering)
+		│   │   └── Availability (DoS / abuse)
+		│   └── Classic vulns (SQLi, XSS) also apply
+		│
+		├── API Recon
+		│   ├── Goal → Map attack surface
+		│   ├── Identify Endpoints
+		│   │   ├── Example: GET /api/books
+		│   │   └── Check variations ( /api/books/mystery )
+		│   ├── Gather Info
+		│   │   ├── Input parameters (mandatory/optional)
+		│   │   ├── Supported HTTP methods (GET, POST, PUT, PATCH, DELETE)
+		│   │   ├── Accepted content types (JSON, XML, Form)
+		│   │   ├── Rate limits
+		│   │   └── Authentication
+		│   └── Tools
+		│       ├── Burp Scanner
+		│       ├── Manual browsing
+		│       └── Wordlists + Intruder
+		│
+		├── API Documentation
+		│   ├── Human-readable
+		│   │   ├── Dev manuals, examples
+		│   │   └── Explain usage scenarios
+		│   ├── Machine-readable
+		│   │   ├── JSON / YAML formats
+		│   │   ├── OpenAPI / Swagger
+		│   │   └── Used for automation
+		│   ├── Discovering Docs
+		│   │   ├── /api
+		│   │   ├── /swagger/index.html
+		│   │   └── /openapi.json
+		│   └── Tools
+		│       ├── Burp OpenAPI Parser BApp
+		│       ├── Postman / SoapUI
+		│       └── Intruder (path brute force)
+		│
+		├── Interacting with Endpoints
+		│   ├── Burp Repeater → observe behavior
+		│   ├── Burp Intruder → fuzz parameters
+		│   ├── Check error messages
+		│   └── Modify:
+		│       ├── HTTP method
+		│       ├── Media type
+		│       └── Parameters
+		│
+		├── Supported HTTP Methods
+		│   ├── GET → retrieve data
+		│   ├── POST → create data
+		│   ├── PUT/PATCH → update data
+		│   ├── DELETE → remove data
+		│   └── OPTIONS → discover methods
+		│
+		├── Supported Content Types
+		│   ├── JSON
+		│   ├── XML
+		│   ├── Form data
+		│   ├── Changing type can:
+		│   │   ├── Trigger errors (info leak)
+		│   │   ├── Bypass defenses
+		│   │   └── Exploit logic flaws
+		│   └── Tools: Content-type converter BApp
+		│
+		├── Hidden Attack Surface
+		│   ├── Hidden Endpoints
+		│   │   ├── Example: PUT /api/user/update
+		│   │   ├── Brute-force other verbs (/delete, /add)
+		│   │   └── Wordlists (common API verbs)
+		│   ├── Hidden Parameters
+		│   │   ├── Undocumented params
+		│   │   ├── Tools:
+		│   │   │   ├── Burp Intruder
+		│   │   │   ├── Param Miner
+		│   │   │   └── Content Discovery
+		│   │   └── May alter app behavior
+		│
+		├── Mass Assignment Vulnerability
+		│   ├── Also called Auto-binding
+		│   ├── Occurs when request params auto-bind to internal objects
+		│   ├── Example
+		│   │   ├── GET returns {id, name, email, isAdmin:false}
+		│   │   ├── PATCH with { "isAdmin":true }
+		│   │   └── → Privilege escalation
+		│   ├── Testing
+		│   │   ├── Add hidden params from objects
+		│   │   ├── Try invalid values (boolean vs string)
+		│   │   └── Check if behavior changes
+		│   └── Prevention
+		│       ├── Whitelist safe properties
+		│       └── Blocklist sensitive ones
+		│
+		└── Prevention (General)
+		    ├── Secure & control documentation
+		    ├── Keep docs updated
+		    ├── Allowlist HTTP methods
+		    ├── Validate content types
+		    ├── Use generic error messages
+		    ├── Secure all API versions
+		    └── Defense in depth
+		        ├── Input validation
+		        ├── Authentication & authorization
+		        └── Rate limiting & monitoring
+
+- ### Testing for Server-Side Parameter Pollution (SSP) — Query String
+     must add all that encoded(#,&,...) 'cause to be part of the value's parameter ->`GET /userSearch?name=peter%26name=carlos&back=/home` that mean the value of "name" param is => "peter%26name=carlos"  |   name=peter%26name=carlos  , we don't wanna to add new param in the req
+
+	1- Truncating query strings
+	2-  Injecting invalid parameters 
+	3- Injecting valid parameters
+	4- Overriding existing parameters
+
+	Great labs : 1- https://portswigger.net/web-security/api-testing/server-side-parameter-pollution/lab-exploiting-server-side-parameter-pollution-in-query-string
+
+
+
+- #### payloads 
+
+		1 )  List resources
+		GET /api/users?page=2&limit=20
+		Headers:
+		  Authorization: Bearer <token>
+		
+		1) Read single resource (BOLA test)
+		GET /api/users/12345
+		-> try GET /api/users/12344 (another user's id) to test ACL
+		
+		2) Create resource
+		POST /api/posts
+		Body: { "title": "hi", "body": "content" }
+		
+		3) Login (Broken auth tests)
+		POST /api/login
+		Body: { "username":"admin", "password":"password123" }
+		
+		4) GraphQL query (expensive)
+		POST /graphql
+		Body: { "query": "{ users { id name posts { id content } } }" }
+		-> test for deep nested queries / introspection
+
+
+- ### Where to find APIs inside an application
+
+		├── Single Page Apps (SPA) JS bundles → network calls to /api/
+		├── Mobile apps → bundled config or captured traffic via emulator + proxy
+		├── OpenAPI/Swagger pages → /swagger.json, /openapi.json
+		├── robots.txt / sitemap.xml (sometimes leak API routes)
+		├── Public JS or repos → environment variables & endpoints
+		├── Hidden admin panels → /admin/api/, /internal/
+		└── Third-party integrations → webhook endpoints, callbacks
+
+
+- ### labs
+
+	lab.1 =>GET /api/user/carlos  | when  i removed carlos then user , found    the doc 
+
+
+	lab.2 =>  i discover all method that api allows i see {GET,PATCH} , lets try to patch -> PATCH /api/products/1/price and add the data  ->{"price":0}, don't forget to change Content-Type BOOOOOM i see 200 OK  , so i can buy this product '1' with 0$
+
+	lab.3 => i just edit the percentage in /api/checkout with POST 
+
+	lab.4 => 
+
+		in server-side parameter poulution  in  endpoint  POST /forget-password   data-> csrf=Sa...wf&username=carlos , i try to inject valid/invalid param like csrf=Sa...wf&username=carlos%26username=xyz
+		csrf=Sa...wf&username=carlos%26foo=xyz  but see error (invalid usernme/invalid parameter)
+		so let's try overriding existing parameters :) i forget we just have one param , but what happend if i try to truncate all thing after "username" param csrf=Sa...wf&username=carlos%23 i saw error ->Field not specified , so i added field as a param csrf=Sa...wf&username=carlos%23field=xyz%26 this time i saw diff error ->invalid field let's FUZZ on values | the results of fuzzing are (email,username) 
+		but we have /static/js/forgotPassword.js  let's take look on it .
+		i found this endpoint in it "/forgot-password?reset_token=${resetToken}" so let's try 'reset-token' param in value of field and BOOM! the result was the token of carlos 'username' i took it and add in /forgot-password?reset_token={the token's carlos} we can reset the passwd's carlos now this lead to account takeover
+
+	lab.5 => rust servier-side-pulution-param-> 
+	
+
+		must do req for the user i need (carlos or administrator) i tested it if this param will add path or value in backend so lets test truncate with # after that i had error "invalid route" . so let's test is it rust or not , username=carlos/../../../../../../../  i added random path traversl's count and show error tell me "not found " that mean i in the root api now , so let's try to discover and brute-force on some file maybe exist in api like [openapi.json ,  openapi.yaml , openapi.yml, swagger.json, swagger.yaml, swagger.yml, /v3/api-docs, /v2/api-docs, api-docs.json, api/openapi.json] 	username=../../../../../../../openapi.json# BOOOOOM! i show error tell me the path of it 	path -> api/internal/v1/users/{username}/field/{field} , must inject in username and add the file i need "username{admin}/field/{reset-token}\"but this version only work in email field so i tried anther version username=../../v1/users/admin/field/reset-token it works i got the reset-token for admin 
