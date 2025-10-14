@@ -1,0 +1,181 @@
+
+## File upload vulnerabilities
+
+
+	├── Definition
+	│   ├── Server accepts user file uploads without sufficient validation (name,
+	 type, contents, size)
+	│   └── May allow server-side executable scripts (e.g., (PHP), (JSP), (PY))
+	│
+	├── Impact
+	│   ├── Remote code execution (RCE) — web shell upload
+	│   ├── Source / sensitive-file disclosure
+	│   ├── Overwrite / directory traversal → modify critical files
+	│   └── Denial of Service (disk exhaustion via large uploads)
+	│
+	├── How vulnerabilities arise
+	│   ├── Blacklist-based filtering instead of whitelist
+	│   ├── Trusting client-supplied Content-Type or file extension
+	│   ├── Inconsistent validation across proxies/backends
+	│   └── Custom upload handling introducing race conditions
+	│
+	├── How servers handle static file requests
+	│   ├── Server parses request path/extension → maps to MIME type
+	│   ├── Non-executable types → return raw file
+	│   └── Executable types → server runs script (if configured); misconfig may
+	 return source as plain text
+	│
+	├── Exploitation techniques
+	│   ├── Direct web shell upload (unrestricted)
+	│   │   └── Example: <?php echo system($_GET['command']); ?> → GET /shell.php?command=id
+	│   │
+	│   ├── Content-Type / multipart bypass
+	│   │   └── Manipulate part-level Content-Type in multipart requests (Burp Repeater)
+	│   │
+	│   ├── Extension blacklist bypass
+	│   │   ├── Alternative extensions (.php5, .phtml, .shtml)
+	│   │   ├── Case obfuscation (exploit.pHp)
+	│   │   └── Double extensions / trailing chars (exploit.php.jpg, exploit.php.)
+	│   │
+	│   ├── Extension obfuscation tricks
+	│   │   ├── URL-encode dots/nulls (exploit%2Ephp, %00)
+	│   │   └── Multibyte unicode that normalizes to dots/nulls
+	│   │
+	│   ├── Server-config override via uploaded config
+	│   │   └── Upload .htaccess / web.config to map custom extension to executable MIME
+	│   │
+	│   ├── Content-based validation bypass
+	│   │   ├── Relying only on magic bytes or simple image checks
+	│   │   └── Polyglot files (JPEG + PHP in metadata)
+	│   │
+	│   ├── Race conditions (upload flow)
+	│   │   ├── Temp upload → validate → move: brief window to access/execute
+	│   │   └── URL-fetch race: brute-force predictable temp names (uniqid, etc.)
+	│   │
+	│   ├── Non-RCE attacks
+	│   │   ├── Stored XSS via HTML or SVG uploads
+	│   │   └── Parser-specific bugs (XXE in Office/XML)
+	│   │
+	│   └── Alternative upload vectors
+	│       └── HTTP PUT to directly write files to server paths
+	│
+	├── Testing checklist / labs
+	│   ├── Send multipart requests modifying part Content-Type
+	│   ├── Fuzz extensions, encodings, null-bytes, multibyte sequences
+	│   ├── Request uploaded file: executed, served raw, or error?
+	│   ├── Probe OPTIONS for PUT support
+	│   └── Try race exploitation with large/chunked uploads and parallel requests
+	│
+	└── Mitigations / prevention
+	    ├── Use extension whitelist, not blacklist
+	    ├── Rename files to random, non-guessable names; avoid original filenames
+	    ├── Store uploads outside web root or in no-exec directories
+	    ├── Do not move to final location until after full validation
+	    ├── Block upload of server config files (.htaccess, web.config)
+	    ├── Validate file contents (dimensions, magic bytes) + sandbox processing
+	    └── Use proven frameworks/libraries rather than custom parsing
+
+
+
+## where to find it 
+
+	Where to find file-upload bugs
+	│
+	├── Web UI / User features
+	│   ├── Profile avatars (avatar, profile_pic)
+	│   ├── Attachment forms (tickets, support, messages, comments)
+	│   ├── Product images / gallery (admin + seller uploads)
+	│   ├── Blog/media managers / WYSIWYG image upload
+	│   ├── Document upload (resumes, invoices, contracts, docs)
+	│   ├── SVG / HTML upload widgets (rich content)
+	│   └── File manager / admin upload panels (CMS admin, vendor portals)
+	│
+	├── APIs & Integration endpoints
+	│   ├── REST API endpoints (/api/upload, /files, /media)
+	│   ├── GraphQL file-input resolvers (multipart requests)
+	│   ├── Mobile app endpoints (multipart / base64 payloads)
+	│   ├── URL-fetch endpoints (server-side import by URL)
+	│   └── Third-party integrations (webhooks, importers)
+	│
+	├── HTTP methods & server interfaces
+	│   ├── Multipart/form-data handlers (multipart parts Content-Type)
+	│   ├── PUT endpoints (direct write)
+	│   ├── WebDAV endpoints
+	│   └── OPTIONS / TRACE / other methods revealing PUT support
+	│
+	├── File serving locations (common paths)
+	│   ├── /uploads/, /static/uploads/, /assets/, /media/, /images/
+	│   ├── /public/, /www/, /htdocs/ (web root)
+	│   ├── /tmp/, /temp/ (temporary storage)
+	│   ├── CDN/origin paths (if origin serves user files)
+	│   └── Unexpected dirs accessible via different vhost/backend
+	│
+	├── Server & config attack surface
+	│   ├── Writable .htaccess or web.config via uploads
+	│   ├── Misconfigured MIME mappings (AddType / SetHandler)
+	│   ├── Directories with exec permission (no-exec not set)
+	│   └── Reverse proxy inconsistencies (nginx vs backend Apache)
+	│
+	├── CMS / Frameworks / Plugins
+	│   ├── WordPress (media, plugins/themes uploads)
+	│   ├── Joomla / Drupal media modules
+	│   ├── E-commerce platforms (Magento, Shopify apps)
+	│   ├── Marketplace / plugin upload endpoints (user-controlled)
+	│   └── Outdated/third-party upload plugins
+	│
+	├── Cloud storage & object services
+	│   ├── S3 buckets (public objects, mis-set ACLs)
+	│   ├── Presigned URLs (predictable or over-permissive)
+	│   ├── Storage-backed uploads (GCS, Azure Blob) with public read
+	│   └── Lambda / function triggers on object create (serverless execution)
+	│
+	├── CI/CD & dev systems
+	│   ├── Artifact repositories (uploadable build artifacts)
+	│   ├── Staging environments with relaxed security
+	│   └── Backup / restore upload endpoints, admin tools
+	│
+	├── Parsers & processors (post-upload)
+	│   ├── Image processors (ImageMagick, Pillow) — check for polyglot
+	│   ├── Office file parsers (LibreOffice, Apache POI) — XXE risk
+	│   ├── Virus scanner / sandbox callbacks (temp files timing)
+	│   └── Thumbnailing services / async workers
+	│
+	├── Misc / niche places
+	│   ├── Email-to-upload features (attachments stored on server)
+	│   ├── IoT device web UI / camera uploads
+	│   ├── SSO / identity providers that accept user pics
+	│   └── Customer-facing file import (CSV/XML) parsers
+	│
+	└── Source-code locations to review
+	    ├── Controllers / handlers that call save()/move_uploaded_file
+	    ├── Middleware that validates Content-Type / extension
+	    ├── Storage adapters (local FS / S3 wrappers)
+	    └── Any custom upload library or old utility functions
+
+
+
+
+
+## labs
+
+lab.1 -> just upload the shell 
+
+lab.2 -> i found func upload but it's only for png and jpeg but when i upload php in apache we saw error "this Content-type shell.php not allow why just accept png ,jpeg "  so i think what happen i  change Content-type in the req and BOOOOOM! i got shell
+
+lab.3 -> i try to upload   shell.php it's uploaded but when i call it i just see blank page but let's show view-source huuuuuuu!!! we found the source but code not execute  that maybe 'casue this dir non-executable 'this dir for static files'  so , lets go away from this path with path traversal the req->$Content-Disposition: form-data; name="avatar"; filename="../exploit.php"$ the resp -> $The file avatars/exploit.php has been uploaded$  we also in the same path so, lets encode / this to escape from validate on path traversal ../ show i made it ..%2fexploit.php BOOOOM!! it's work  REQ -> `filename="..%2fexploit.php"`  RESP -> `The file avatars/../exploit.php has been uploaded` 
+
+
+lab.3 -> when i upload it on apache tell me .php not allow so i changed it to phpt  that made the file uploaded but the server dosen't process it as php code it processed it as text and when i try to access it from browser i see the php code as text in view-source  and that happen 'cause that .htaccess config file in server where the Dev added it. it said all file in this pat treat them as static file "text" . we must change this .htaccess with upload  our .htaccess with our config  " AddType application/x-httpd-php .phpt "  then upload our shell.phpt and access it BOOOOOM! the code was run
+
+lab.4 -> just use null byte  in all version before 5.3
+
+lab.5 -> the server check  magic bytes in photo so we must add the magic bytes of png | how ot do that hhmmmm ! | we'll add comment in the photo .png with exiftool  and this comment will contain php code then when we uplaod the file change the extension name to php and upload it 
+  
+   <?php echo 'START >>>>>>>>' . file_get_contents('/home/carlos/secret') . ' <<<<<<<<<<<END'; ?>
+   that will show you the content of file but how the photo became execute php -> the server put the photo in webroot the has parser for many lang like php and when you inject comment in the photo and upload it with changing the extension form image.png ot image.php , server run it with php parser and exec all thing in < ?  php  .....code....?> 
+
+
+lab.5 -> why upload but tell me not upload so i show the hunt and found that file upload in tmp then go to check quickly in to func (virus, fileType) if the file falid in any of these couple func tell me file not uploaded so what happen if i upload it and access it very quickly before the check get the result of these cuople func let's send the upload then try to race condition on many of accessing the uploaded file before result of checks
+
+
+lab.6
