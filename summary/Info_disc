@@ -1,0 +1,65 @@
+# what is summary info_disc
+
+
+	Information disclosure (Information leakage)
+
+	├─ Definition
+	│  └─ Unintended exposure of sensitive information to users or attackers
+	├─ Common examples
+	│  ├─ robots.txt → reveals hidden directories
+	│  ├─ directory listing → exposes folder contents
+	│  ├─ source/backups accessible (index.bak, .zip, .sql)
+	│  ├─ verbose/error messages revealing DB/table/column names
+	│  ├─ developer comments in HTML/JS
+	│  ├─ hard-coded API keys / credentials in code
+	│  ├─ leaking usernames or resource existence via behavioral differences
+	│  └─ tech-stack metadata: framework versions, directory structure, IPs
+	├─ Root causes
+	│  ├─ failing to remove internal content from public site (dev comments, backups)
+	│  ├─ insecure configuration or debugging enabled in production
+	│  └─ flawed application design → distinct responses revealing state (enum)
+	├─ Impact / severity
+	│  ├─ Direct: sensitive user/business data leaked (e.g., credit cards) → high
+	│  ├─ Indirect: technical info used to discover further vulnerabilities → contextual
+	│  └─ Severity depends on sensitivity + exploitability of leaked info
+	├─ Assessment guidance
+	│  ├─ Ask: can an attacker do something harmful with the info?
+	│  ├─ Info about versions only matters if vulnerable/patchable exploit exists
+	│  └─ Prioritize proof-of-exploit over logging mere presence of leakage
+	├─ How to find & exploit (practical steps)
+	│  ├─ Recon: inspect HTTP headers, metadata, robots.txt, sitemap
+	│  ├─ Directory/URL brute-forcing for backups and source files
+	│  ├─ Force errors to observe verbose server responses
+	│  ├─ Check cloud buckets, open S3, misconfigured storage
+	│  ├─ Search code/config for hard-coded secrets or credentials
+	│  ├─ Use timing/response differences for username/resource enumeration
+	│  └─ Correlate discovered versions with CVEs / public exploits
+	└─ Mitigations / best practices
+	   ├─ Principle
+	   │  ├─ Separate dev/test from production; disable debug/diagnostics in prod
+	   │  ├─ Use generic error messages; avoid revealing internal state
+	   │  └─ Define and document what is "sensitive" for the org
+	   ├─ Process
+	   │  ├─ Automated code audits and secret scanning in CI (strip dev comments)
+	   │  ├─ Threat-model third-party tech and disable unused features
+	   │  └─ Use secret management instead of embedding credentials
+	   └─ Tools & monitoring
+	      ├─ SAST/DAST scanners, secret-detection tools
+	      ├─ Hardened configuration for servers and storage (S3, buckets, indexes)
+	      └─ Logging/alerts that avoid exposing sensitive data in logs
+
+
+
+
+# labs
+
+lab.1 -> in param  /product?productId=2 | it expect number in it , so what happen if i  put string like /product?productId="2" it gives me error that i show the version of server.
+
+lab.2 -> I search in html page about any comment so i found the path /cgi-bin/phpinfo.php so i go to it and i show all info about php also the SECRET_KEY .
+
+lab.3 -> i trying robots.txt then i found /backup i can access it so i read it 'the source code' i found username,password for DB.
+
+lab.4 -> i do  fuzz on root  dir and found /admin when i go to access it , tell me admin interface only for local user . so i try to add X-Forwarded-For ,more haeder .... but not work , so i must to debug the request with HTTP Method TRACE to show if there is any header added in my req in network layer ,server,backend .TRACE /admin HMMMMMMMMMM i found  new header in the resposne named X-Custom-Ip-Authorization: , add it in my req and add internal ip like 127.0.0.1 .
+
+
+lab.5 -> i must learn more about git cli in console 
