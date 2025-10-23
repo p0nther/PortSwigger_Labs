@@ -33,4 +33,4 @@ for l in range(1,21):
             sys.stdout.write(f"\rTrying: {passwd}{chr(asc)}")
             sys.stdout.flush()
 
-print(f"Found passwd: {passwd}")
+print(f"\nFound passwd: {passwd}")
